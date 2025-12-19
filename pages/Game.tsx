@@ -7,10 +7,12 @@ import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 // --- Configuration ---
+// We use a slightly lower resolution request to try and get the "Main" lens 
+// rather than a cropped video lens.
 const MOBILE_CONSTRAINTS = {
-  width: { ideal: 1080 },
-  height: { ideal: 1920 },
-  facingMode: "environment"
+  facingMode: "environment",
+  width: { ideal: 1280 }, // Requesting standard HD often prevents extra cropping
+  height: { ideal: 720 }
 };
 
 const DESKTOP_CONSTRAINTS = {
@@ -85,9 +87,9 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
         
         let x, y;
         if (isMobile) {
-            // Tuned for Camera Z=10
-            x = -((landmarks[8].x - 0.5) * 14); // Sensitivity X
-            y = -(landmarks[8].y - 0.55) * 18; // Sensitivity Y
+            // Tuned for Z=10
+            x = -((landmarks[8].x - 0.5) * 14); 
+            y = -(landmarks[8].y - 0.55) * 18; 
         } else {
             x = -((landmarks[8].x - 0.5) * 14); 
             y = -(landmarks[8].y - 0.5) * 10;
@@ -121,7 +123,6 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
       const targetRot = isGrabbing ? -0.8 : 0;
       group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.2);
       
-      // FIX: Increased scale back to >1.0 so it looks normal size
       const scale = isMobile ? 1.2 : 1.4;
       group.current.scale.set(scale, scale, scale);
     }
@@ -357,6 +358,9 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
   const [showOverlay, setShowOverlay] = useState(false);
   const [overlayMsg, setOverlayMsg] = useState("");
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  
+  // New state to toggle "Zoom" vs "Fit"
+  const [fitMode, setFitMode] = useState<'cover' | 'contain'>('cover');
 
   const currentConfig = LEVELS[level];
   const progressPercent = ((progress.stage) / progress.totalStages) * 100;
@@ -372,8 +376,8 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
   };
 
   const videoConstraints = isMobile 
-    ? { width: { ideal: 1080 }, height: { ideal: 1920 }, facingMode }
-    : { width: 640, height: 480, facingMode };
+    ? MOBILE_CONSTRAINTS
+    : DESKTOP_CONSTRAINTS;
 
   return (
     <div className="h-[100dvh] w-full bg-heritage-black relative overflow-hidden">
@@ -381,12 +385,12 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         key={facingMode} 
         ref={webcamRef} audio={false} mirrored={facingMode === 'user'}
         playsInline={true} muted={true}
-        className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none"
+        // FIX: Dynamic object-fit based on user choice
+        className={`absolute inset-0 w-full h-full opacity-30 pointer-events-none ${fitMode === 'cover' ? 'object-cover' : 'object-contain bg-black'}`}
         videoConstraints={videoConstraints}
       />
       
       <div className="absolute inset-0 z-10">
-        {/* FIX: Set Camera Z to 10 (Balanced distance) */}
         <Canvas camera={{ position: [0, 0, 10], fov: isMobile ? 75 : 50 }}>
           <GameScene 
              webcamRef={webcamRef} 
@@ -418,9 +422,20 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         </div>
       </div>
 
-      <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="absolute top-6 right-6 z-50 bg-black/60 text-white p-3 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors">
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-      </button>
+      <div className="absolute top-6 right-6 z-50 flex gap-2">
+        {/* FIX: New Button to toggle ZOOM */}
+        <button onClick={() => setFitMode(prev => prev === 'cover' ? 'contain' : 'cover')} className="bg-black/60 text-white p-3 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors">
+            {fitMode === 'cover' ? (
+                <span className="text-xs font-bold">UNZOOM</span>
+            ) : (
+                <span className="text-xs font-bold">FILL</span>
+            )}
+        </button>
+
+        <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="bg-black/60 text-white p-3 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+        </button>
+      </div>
 
       {showOverlay && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-heritage-black/90 backdrop-blur-sm">
