@@ -7,10 +7,7 @@ import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 // --- Configuration ---
-
-// FIX 1: ULTRA-LOW RESOLUTION FOR SPEED
-// We drop to 480p. The background might be slightly blurry, 
-// but the hand tracking will be instant.
+// Low resolution for maximum FPS on mobile
 const MOBILE_CONSTRAINTS = {
   facingMode: "environment",
   width: { ideal: 480 },
@@ -23,7 +20,6 @@ const DESKTOP_CONSTRAINTS = {
   facingMode: "user"
 };
 
-const BOUNDS = { x: 4.5, yTop: 4.0, yBottom: -5 }; 
 const PICKUP_THRESHOLD_Y = -2.0; 
 const TOSS_THRESHOLD_Y = 0.8; 
 const RELOAD_THRESHOLD_Y = -1.0; 
@@ -34,8 +30,6 @@ type StageAction = 'PICK' | 'PLACE' | 'EXCHANGE';
 interface StageConfig { action: StageAction; count: number; message: string; }
 interface LevelConfig { id: number; name: string; stages: StageConfig[]; gravity: number; catchRadius: number; initialHandStones: number; initialGroundStones: number; }
 
-// FIX 2: LARGER CATCH RADIUS
-// Increased catchRadius to 4.0+ to make it easier to grab even with slight lag.
 const LEVELS: Record<number, LevelConfig> = {
   1: { id: 1, name: "LEVEL 1: BUAH SATU", stages: [{ action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -10, catchRadius: 4.5, initialHandStones: 1, initialGroundStones: 4 },
   2: { id: 2, name: "LEVEL 2: BUAH DUA", stages: [{ action: 'PICK', count: 2, message: "PICK 2 STONES" }, { action: 'PICK', count: 2, message: "PICK 2 STONES" }], gravity: -12, catchRadius: 4.0, initialHandStones: 1, initialGroundStones: 4 },
@@ -67,7 +61,7 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
           },
           runningMode: "VIDEO",
           numHands: 1,
-          minHandDetectionConfidence: 0.3, // Lowered for speed
+          minHandDetectionConfidence: 0.3,
           minHandPresenceConfidence: 0.3,
           minTrackingConfidence: 0.3
         });
@@ -91,22 +85,20 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
         
         let x, y;
         if (isMobile) {
-            // Sensitivity tuned for low-res
-            x = -((landmarks[8].x - 0.5) * 15); 
-            y = -(landmarks[8].y - 0.55) * 19; 
+            // FIX: EXTREME SENSITIVITY
+            // Multipliers increased to 25 and 30 so small thumb movements cover the whole screen
+            x = -((landmarks[8].x - 0.5) * 25); 
+            y = -(landmarks[8].y - 0.55) * 30; 
         } else {
             x = -((landmarks[8].x - 0.5) * 14); 
             y = -(landmarks[8].y - 0.5) * 10;
         }
 
-        // Invisible walls
-        x = Math.max(-4.2, Math.min(4.2, x));
-        y = Math.max(-7.0, Math.min(6.0, y));
+        // Clamp to screen edges (Adjusted for new Camera Z=14)
+        x = Math.max(-5.5, Math.min(5.5, x));
+        y = Math.max(-8.0, Math.min(6.5, y));
 
-        // FIX 3: INCREASED "SNAP" SPEED
-        // Changed lerp from 0.2 to 0.5. 
-        // 0.2 = Smooth but laggy
-        // 0.5 = Fast but slightly jittery (Better for gaming)
+        // Fast response time
         handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.5); 
 
         const dx = landmarks[4].x - landmarks[8].x;
@@ -122,7 +114,6 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
 // --- 3D Components ---
 const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }: { position: THREE.Vector3, stonesInHand: number, isGrabbing: boolean, canToss: boolean, isMobile: boolean }) => {
   const group = useRef<THREE.Group>(null);
-  
   const skinColor = isGrabbing ? "#86efac" : (canToss ? "#ffffff" : "#eecfad");
 
   useFrame(() => {
@@ -130,17 +121,16 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
       group.current.position.copy(position);
       group.current.rotation.z = -position.x * 0.1;
       const targetRot = isGrabbing ? -0.8 : 0;
-      // Faster rotation snap for grabbing visual
       group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.4);
       
-      const scale = isMobile ? 1.2 : 1.4;
+      // Scale adjusted for Z=14
+      const scale = isMobile ? 1.5 : 1.4;
       group.current.scale.set(scale, scale, scale);
     }
   });
 
   const Finger = ({ x, length, rotZ = 0 }: { x: number, length: number, rotZ?: number }) => (
     <group position={[x, 0.6, 0]} rotation={[0, 0, rotZ]}>
-      {/* Reduced geometry complexity for mobile performance */}
       <Sphere args={[0.13, 8, 8]} position={[0, 0, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
       <Cylinder args={[0.12, 0.13, length/2, 8]} position={[0, length/4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
       <Sphere args={[0.11, 8, 8]} position={[0, length/2, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
@@ -399,7 +389,8 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
       />
       
       <div className="absolute inset-0 z-10">
-        <Canvas camera={{ position: [0, 0, 10], fov: isMobile ? 75 : 50 }}>
+        {/* FIX: Cap Pixel Density to 1.5 max AND move Camera back to z=14 */}
+        <Canvas dpr={[1, 1.5]} camera={{ position: [0, 0, 14], fov: isMobile ? 75 : 50 }}>
           <GameScene 
              webcamRef={webcamRef} 
              level={level} 
@@ -412,6 +403,7 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         </Canvas>
       </div>
 
+      {/* Main TOSS Button */}
       <button 
         ref={manualTossRef}
         className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-heritage-orange/90 active:bg-heritage-orange text-white w-20 h-20 rounded-full border-4 border-white/20 shadow-xl flex items-center justify-center font-bold tracking-widest animate-pulse"
@@ -419,7 +411,7 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         TOSS
       </button>
 
-      {/* HUD - Mobile Optimized */}
+      {/* Top Banner (Level Info) */}
       <div className={`absolute ${isMobile ? 'top-4 left-1/2 transform -translate-x-1/2 w-[90%]' : 'top-24 left-6 w-64'} z-20 pointer-events-none`}>
         <div className="bg-heritage-black/80 border border-heritage-orange/50 p-3 rounded-lg backdrop-blur-md shadow-lg text-center md:text-left flex flex-col items-center md:items-start">
           <h3 className="text-heritage-orange font-serif text-lg font-bold">{currentConfig.name}</h3>
@@ -430,16 +422,19 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         </div>
       </div>
 
-      <div className="absolute top-6 right-6 z-50 flex gap-2">
-        <button onClick={() => setFitMode(prev => prev === 'cover' ? 'contain' : 'cover')} className="bg-black/60 text-white p-3 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors">
+      {/* Control Buttons (Moved to Bottom to avoid blocking text) */}
+      <div className="absolute bottom-6 left-6 z-50">
+        <button onClick={() => setFitMode(prev => prev === 'cover' ? 'contain' : 'cover')} className="bg-black/60 text-white w-12 h-12 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors flex items-center justify-center">
             {fitMode === 'cover' ? (
-                <span className="text-xs font-bold">UNZOOM</span>
+                <span className="text-[10px] font-bold">UNZOOM</span>
             ) : (
-                <span className="text-xs font-bold">FILL</span>
+                <span className="text-[10px] font-bold">FILL</span>
             )}
         </button>
-
-        <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="bg-black/60 text-white p-3 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors">
+      </div>
+      
+      <div className="absolute bottom-6 right-6 z-50">
+        <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="bg-black/60 text-white w-12 h-12 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors flex items-center justify-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
         </button>
       </div>
