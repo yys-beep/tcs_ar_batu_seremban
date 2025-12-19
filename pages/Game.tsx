@@ -7,14 +7,11 @@ import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 // --- Configuration ---
-
-// FIX 1: FORCE PORTRAIT MODE (Vertical Video)
-// We request Height 1280 and Width 720. 
-// This matches your phone screen shape, so it "Fills" the screen without "Zooming".
+// Reverted to Landscape constraints which are more stable on Android/iOS
 const MOBILE_CONSTRAINTS = {
   facingMode: "environment",
-  width: { ideal: 720 }, // Narrower width
-  height: { ideal: 1280 } // Taller height
+  width: { ideal: 1280 },
+  height: { ideal: 720 } 
 };
 
 const DESKTOP_CONSTRAINTS = {
@@ -127,6 +124,7 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
       const targetRot = isGrabbing ? -0.8 : 0;
       group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.4);
       
+      // Sizes: Mobile 1.2, PC 1.4
       const scale = isMobile ? 1.2 : 1.4;
       group.current.scale.set(scale, scale, scale);
     }
@@ -361,6 +359,9 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
   const [showOverlay, setShowOverlay] = useState(false);
   const [overlayMsg, setOverlayMsg] = useState("");
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  
+  // RESTORED: Manual Fit Toggle
+  const [fitMode, setFitMode] = useState<'cover' | 'contain'>('cover');
 
   const currentConfig = LEVELS[level];
   const progressPercent = ((progress.stage) / progress.totalStages) * 100;
@@ -385,8 +386,8 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         key={facingMode} 
         ref={webcamRef} audio={false} mirrored={facingMode === 'user'}
         playsInline={true} muted={true}
-        // FIX 2: FORCE OBJECT-COVER (No "Fill" button needed anymore)
-        className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none"
+        // DYNAMIC CLASS for Unzoom Support
+        className={`absolute inset-0 w-full h-full opacity-30 pointer-events-none ${fitMode === 'cover' ? 'object-cover' : 'object-contain bg-black'}`}
         videoConstraints={videoConstraints}
       />
       
@@ -422,8 +423,15 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
           </div>
         </div>
       </div>
+
+      {/* RESTORED: Unzoom Button (Bottom Left) */}
+      <div className="absolute bottom-6 left-6 z-50">
+        <button onClick={() => setFitMode(prev => prev === 'cover' ? 'contain' : 'cover')} className="bg-black/60 text-white w-12 h-12 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors flex items-center justify-center">
+            {fitMode === 'cover' ? <span className="text-[10px] font-bold">UNZOOM</span> : <span className="text-[10px] font-bold">FILL</span>}
+        </button>
+      </div>
       
-      {/* FIX 3: MOVED CAMERA BUTTON DOWN */}
+      {/* Camera Switch Button (Bottom Right) */}
       <div className="absolute bottom-6 right-6 z-50">
         <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="bg-black/60 text-white w-12 h-12 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors flex items-center justify-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
