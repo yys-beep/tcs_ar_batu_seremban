@@ -7,10 +7,11 @@ import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 // --- Configuration ---
-// Requesting HD resolution (720p) prevents the "Zoom Crop" on most phones
+// FIX 1: Requesting 1080p (High Res) often triggers the "Wide" lens on Android/iOS
+// instead of the cropped video stabilization lens.
 const MOBILE_CONSTRAINTS = {
-  width: { ideal: 720 },
-  height: { ideal: 1280 },
+  width: { ideal: 1080 },
+  height: { ideal: 1920 },
   facingMode: "environment"
 };
 
@@ -87,15 +88,18 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
         let x, y;
         if (isMobile) {
             // Updated mapping for wider camera FOV
-            x = -((landmarks[8].x - 0.5) * 12); 
-            y = -(landmarks[8].y - 0.55) * 16; 
+            // Because we zoomed out the camera, we need to multiply these by a larger number
+            // so the hand can still reach the edges of the screen
+            x = -((landmarks[8].x - 0.5) * 16); // Increased from 12
+            y = -(landmarks[8].y - 0.55) * 20; // Increased from 16
         } else {
             x = -((landmarks[8].x - 0.5) * 14); 
             y = -(landmarks[8].y - 0.5) * 10;
         }
 
-        x = Math.max(-6, Math.min(6, x));
-        y = Math.max(-8, Math.min(6, y));
+        // Expanded bounds so you can reach the corners
+        x = Math.max(-8, Math.min(8, x));
+        y = Math.max(-10, Math.min(8, y));
 
         handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.4); 
 
@@ -122,8 +126,8 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
       const targetRot = isGrabbing ? -0.8 : 0;
       group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.2);
       
-      // Hand size fine-tuned for new FOV
-      const scale = isMobile ? 0.65 : 1.0;
+      // FIX 3: Reduced scale from 0.65 to 0.5 to make it look further away
+      const scale = isMobile ? 0.5 : 1.0;
       group.current.scale.set(scale, scale, scale);
     }
   });
@@ -373,11 +377,11 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
   };
 
   const videoConstraints = isMobile 
-    ? { width: { ideal: 720 }, height: { ideal: 1280 }, facingMode }
+    ? { width: { ideal: 1080 }, height: { ideal: 1920 }, facingMode }
     : { width: 640, height: 480, facingMode };
 
   return (
-    <div className="h-screen w-full bg-heritage-black relative overflow-hidden">
+    <div className="h-[100dvh] w-full bg-heritage-black relative overflow-hidden">
       <Webcam
         key={facingMode} 
         ref={webcamRef} audio={false} mirrored={facingMode === 'user'}
@@ -387,8 +391,8 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
       />
       
       <div className="absolute inset-0 z-10">
-        {/* WIDER FOV ON MOBILE to simulate Zoom Out */}
-        <Canvas camera={{ position: [0, 0, 7], fov: isMobile ? 80 : 50 }}>
+        {/* FIX 2: Moved Camera Back (z=12) and increased FOV */}
+        <Canvas camera={{ position: [0, 0, 12], fov: isMobile ? 75 : 50 }}>
           <GameScene 
              webcamRef={webcamRef} 
              level={level} 
