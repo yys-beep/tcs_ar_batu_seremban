@@ -1,16 +1,18 @@
 /// <reference types="@react-three/fiber" />
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import Webcam from 'react-webcam';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Cylinder, Sphere, Tetrahedron, Float, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
-// --- Constants ---
-const VIDEO_WIDTH = 640;
-const VIDEO_HEIGHT = 480;
-const BOUNDS = { x: 5.5, yTop: 4.0, yBottom: -5 }; 
+// --- Configuration ---
+const MOBILE_VIDEO_WIDTH = 360;
+const MOBILE_VIDEO_HEIGHT = 480;
+const BOUNDS = { x: 4.5, yTop: 4.0, yBottom: -5 }; 
 const PICKUP_THRESHOLD_Y = -2.0; 
+const TOSS_THRESHOLD_Y = 0.8; 
+const RELOAD_THRESHOLD_Y = -1.0; // Must dip hand below this to toss again
 
 // --- Types ---
 enum GameState { IDLE, HOLDING, TOSSING, FALLING, CAUGHT, DROPPED, LEVEL_COMPLETE, GAME_OVER }
@@ -19,39 +21,45 @@ interface StageConfig { action: StageAction; count: number; message: string; }
 interface LevelConfig { id: number; name: string; stages: StageConfig[]; gravity: number; catchRadius: number; initialHandStones: number; initialGroundStones: number; }
 
 const LEVELS: Record<number, LevelConfig> = {
-  1: { id: 1, name: "LEVEL 1: BUAH SATU", stages: [{ action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -10, catchRadius: 2.5, initialHandStones: 1, initialGroundStones: 4 },
-  2: { id: 2, name: "LEVEL 2: BUAH DUA", stages: [{ action: 'PICK', count: 2, message: "PICK 2 STONES" }, { action: 'PICK', count: 2, message: "PICK 2 STONES" }], gravity: -12, catchRadius: 2.2, initialHandStones: 1, initialGroundStones: 4 },
-  3: { id: 3, name: "LEVEL 3: BUAH TIGA", stages: [{ action: 'PICK', count: 3, message: "PICK 3 STONES" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -14, catchRadius: 2.0, initialHandStones: 1, initialGroundStones: 4 },
-  4: { id: 4, name: "LEVEL 4: BUAH EMPAT", stages: [{ action: 'PICK', count: 4, message: "PICK ALL 4 STONES" }], gravity: -15, catchRadius: 1.8, initialHandStones: 1, initialGroundStones: 4 },
-  5: { id: 5, name: "LEVEL 5: BUAH LIMA", stages: [{ action: 'PLACE', count: 4, message: "PLACE 4 STONES" }, { action: 'PICK', count: 4, message: "PICK ALL 4" }], gravity: -15, catchRadius: 1.8, initialHandStones: 5, initialGroundStones: 0 },
+  1: { id: 1, name: "LEVEL 1: BUAH SATU", stages: [{ action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -10, catchRadius: 3.0, initialHandStones: 1, initialGroundStones: 4 },
+  2: { id: 2, name: "LEVEL 2: BUAH DUA", stages: [{ action: 'PICK', count: 2, message: "PICK 2 STONES" }, { action: 'PICK', count: 2, message: "PICK 2 STONES" }], gravity: -12, catchRadius: 2.5, initialHandStones: 1, initialGroundStones: 4 },
+  3: { id: 3, name: "LEVEL 3: BUAH TIGA", stages: [{ action: 'PICK', count: 3, message: "PICK 3 STONES" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -14, catchRadius: 2.2, initialHandStones: 1, initialGroundStones: 4 },
+  4: { id: 4, name: "LEVEL 4: BUAH EMPAT", stages: [{ action: 'PICK', count: 4, message: "PICK ALL 4 STONES" }], gravity: -15, catchRadius: 2.0, initialHandStones: 1, initialGroundStones: 4 },
+  5: { id: 5, name: "LEVEL 5: BUAH LIMA", stages: [{ action: 'PLACE', count: 4, message: "PLACE 4 STONES" }, { action: 'PICK', count: 4, message: "PICK ALL 4" }], gravity: -15, catchRadius: 2.0, initialHandStones: 5, initialGroundStones: 0 },
   6: { id: 6, name: "LEVEL 6: TUKAR", stages: [{ action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }], gravity: -16, catchRadius: 1.8, initialHandStones: 2, initialGroundStones: 3 },
   7: { id: 7, name: "LEVEL 7: ADVANCED", stages: [{ action: 'PICK', count: 1, message: "PICK 1 (FAST)" }, { action: 'PICK', count: 3, message: "PICK 3 (FAST)" }], gravity: -18, catchRadius: 1.5, initialHandStones: 1, initialGroundStones: 4 },
   8: { id: 8, name: "LEVEL 8: TIMBANG", stages: [{ action: 'PICK', count: 4, message: "CHALLENGE: PICK ALL!" }], gravity: -20, catchRadius: 1.2, initialHandStones: 1, initialGroundStones: 4 },
 };
 
-// --- MediaPipe Input Hook ---
-const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>) => {
-  const handPos = useRef(new THREE.Vector3(0, -2, 0));
-  const velocity = useRef(new THREE.Vector3(0, 0, 0)); 
+// --- MediaPipe Hook ---
+const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean) => {
+  const handPos = useRef(new THREE.Vector3(0, -3, 0)); 
   const isPinching = useRef(false);
   const landmarkerRef = useRef<HandLandmarker | null>(null);
   const lastVideoTime = useRef(-1);
 
   useEffect(() => {
-    const loadModel = async () => {
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-      );
-      landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-          delegate: "GPU"
-        },
-        runningMode: "VIDEO",
-        numHands: 1
-      });
+    const setupModel = async () => {
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+        );
+        landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+            delegate: "GPU"
+          },
+          runningMode: "VIDEO",
+          numHands: 1,
+          minHandDetectionConfidence: 0.5,
+          minHandPresenceConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+      } catch (err) {
+        console.error("Failed to load MediaPipe:", err);
+      }
     };
-    loadModel();
+    setupModel();
   }, []);
 
   useFrame(() => {
@@ -65,39 +73,44 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>) => {
       if (result.landmarks && result.landmarks.length > 0) {
         const landmarks = result.landmarks[0];
         
-        // Map Position (Index Finger Tip)
-        const x = -((landmarks[8].x - 0.5) * 14); 
-        const y = -(landmarks[8].y - 0.5) * 10; 
-        const targetPos = new THREE.Vector3(x, y, 0);
+        let x, y;
+        if (isMobile) {
+            x = -((landmarks[8].x - 0.5) * 8); 
+            y = -(landmarks[8].y - 0.6) * 12; 
+        } else {
+            x = -((landmarks[8].x - 0.5) * 14); 
+            y = -(landmarks[8].y - 0.5) * 10;
+        }
 
-        // Velocity Calc (Crucial for throwing)
-        const instantVel = targetPos.clone().sub(handPos.current).divideScalar(0.016);
-        velocity.current.lerp(instantVel, 0.3); // Less smoothing = more responsive throw
+        // Clamp values
+        x = Math.max(-5, Math.min(5, x));
+        y = Math.max(-6, Math.min(5, y));
 
-        handPos.current.lerp(targetPos, 0.3);
+        handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.4); 
 
-        // Pinch Detection
         const dx = landmarks[4].x - landmarks[8].x;
         const dy = landmarks[4].y - landmarks[8].y;
-        isPinching.current = Math.sqrt(dx*dx + dy*dy) < 0.05; 
+        isPinching.current = Math.sqrt(dx*dx + dy*dy) < 0.08;
       }
     }
   });
 
-  return { handPos, velocity, isPinching };
+  return { handPos, isPinching };
 };
 
 // --- 3D Components ---
-const MannequinHand = ({ position, stonesInHand, isGrabbing }: { position: THREE.Vector3, stonesInHand: number, isGrabbing: boolean }) => {
+const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss }: { position: THREE.Vector3, stonesInHand: number, isGrabbing: boolean, canToss: boolean }) => {
   const group = useRef<THREE.Group>(null);
-  const skinColor = "#eecfad"; 
+  
+  // Visual Feedback: Green=Pinch, White=Ready to Toss, Tan=Idle
+  const skinColor = isGrabbing ? "#86efac" : (canToss ? "#ffffff" : "#eecfad");
 
   useFrame(() => {
     if(group.current) {
-      group.current.position.lerp(position, 0.5); // Faster follow speed
-      group.current.rotation.z = -position.x * 0.1; 
+      group.current.position.copy(position);
+      group.current.rotation.z = -position.x * 0.1;
       const targetRot = isGrabbing ? -0.8 : 0;
-      group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.1);
+      group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.2);
     }
   });
 
@@ -133,7 +146,7 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing }: { position: THREE
       </group>
       {Array.from({ length: stonesInHand }).map((_, i) => (
          <Tetrahedron key={i} args={[0.15, 0]} position={[-0.2 + i * 0.15, 0.4, 0.3]}>
-            <meshStandardMaterial color="#a1a1aa" roughness={0.5} />
+            <meshStandardMaterial color="#fbbf24" roughness={0.2} />
          </Tetrahedron>
       ))}
     </group>
@@ -150,7 +163,7 @@ const BatuSandbag = ({ position, rotation }: { position: THREE.Vector3, rotation
 );
 
 const GroundStones = ({ count }: { count: number }) => (
-    <group position={[0, BOUNDS.yBottom + 0.5, -1]}>
+    <group position={[0, -5.5, -1]}>
       {Array.from({ length: count }).map((_, i) => (
         <Tetrahedron key={i} args={[0.4, 0]} position={[-1.5 + i * 1, 0, 0]} rotation={[i*2, i*3, i*0.5]}>
            <meshStandardMaterial color="#52525b" roughness={0.6} />
@@ -159,23 +172,28 @@ const GroundStones = ({ count }: { count: number }) => (
     </group>
 );
 
-const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail }: any) => {
-  const { handPos, velocity, isPinching } = useMediaPipeInput(webcamRef);
+// --- Game Logic ---
+const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMobile, manualTossRef }: any) => {
+  const { handPos, isPinching } = useMediaPipeInput(webcamRef, isMobile);
   const config = LEVELS[level as number];
+  
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
   const [stonePos, setStonePos] = useState(new THREE.Vector3());
   const [stoneVel, setStoneVel] = useState(new THREE.Vector3());
   const [stoneRot, setStoneRot] = useState(new THREE.Euler());
-  const [message, setMessage] = useState("Loading Hand Tracking...");
+  const [message, setMessage] = useState("Scan Hand...");
   const [currentStageIndex, setCurrentStageIndex] = useState(0);
   const [stonesOnGround, setStonesOnGround] = useState(0);
   const [stonesInHand, setStonesInHand] = useState(0);
   const [actionPerformed, setActionPerformed] = useState(false);
-  const [isAiReady, setIsAiReady] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  
+  // NEW: Reload Mechanic
+  const [canToss, setCanToss] = useState(true);
 
   useEffect(() => {
-    if (handPos.current.y !== -2 && !isAiReady) {
-        setIsAiReady(true);
+    if (!hasStarted && handPos.current.y > -2.9) {
+        setHasStarted(true);
         setMessage(config.stages[0].message);
     }
   }, [handPos.current.y]);
@@ -186,40 +204,43 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail }: an
     setStonesOnGround(config.initialGroundStones);
     setStonesInHand(config.initialHandStones);
     setGameState(GameState.IDLE);
-    if(isAiReady) setMessage(stage.message);
+    setMessage(stage.message);
     setActionPerformed(false);
+    setCanToss(true);
     onProgress({ stage: 0, totalStages: config.stages.length });
-  }, [level, config, onProgress]);
+  }, [level, config]);
 
   const currentStage = config.stages[currentStageIndex];
 
-  // --- TOSS LOGIC ---
   const triggerToss = () => {
-    // Only toss if we have stones and aren't already tossing/falling
     if ((gameState === GameState.IDLE || gameState === GameState.HOLDING || gameState === GameState.CAUGHT) && stonesInHand > 0) {
         setStonesInHand(s => s - 1);
         setGameState(GameState.TOSSING);
-        setStoneVel(new THREE.Vector3(0, 9, 0)); // Consistent throw height
+        setStoneVel(new THREE.Vector3(0, 10, 0)); 
         setActionPerformed(false);
         setMessage(""); 
+        setCanToss(false); // MUST RELOAD
     }
   };
 
-  const wasPinching = useRef(false);
+  useEffect(() => {
+    if (manualTossRef.current) manualTossRef.current.onclick = triggerToss;
+  }, [gameState, stonesInHand]);
 
   useFrame((_, delta) => {
     if (gameState === GameState.LEVEL_COMPLETE || gameState === GameState.GAME_OVER) return;
 
-    // Gesture 1: Pinch Release
-    if (wasPinching.current && !isPinching.current) triggerToss();
-    wasPinching.current = isPinching.current;
+    // 1. RELOAD CHECK (Dip hand low to enable next toss)
+    if (!canToss && handPos.current.y < RELOAD_THRESHOLD_Y && gameState === GameState.IDLE) {
+        setCanToss(true);
+    }
 
-    // Gesture 2: Velocity Check (Easier now: > 0.8 instead of 3.0)
-    if (velocity.current.y > 0.8 && stonesInHand > 0) triggerToss();
+    // 2. AUTO TOSS (Only if canToss is TRUE)
+    if (canToss && handPos.current.y > TOSS_THRESHOLD_Y && stonesInHand > 0 && gameState === GameState.IDLE) {
+        triggerToss();
+    }
 
-
-    // --- PHYSICS LOOP ---
-    // Collision / Action Check
+    // 3. Interaction
     if ((gameState === GameState.TOSSING || gameState === GameState.FALLING) && handPos.current.y < PICKUP_THRESHOLD_Y && !actionPerformed) {
       if (currentStage.action === 'PICK' && stonesOnGround >= currentStage.count) {
         setStonesOnGround(s => s - currentStage.count);
@@ -234,24 +255,22 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail }: an
       }
     }
 
+    // Physics
     switch (gameState) {
       case GameState.IDLE: case GameState.HOLDING: case GameState.CAUGHT:
-        // Stone sticks to hand
         const holdPos = handPos.current.clone().add(new THREE.Vector3(0, 0.6, 0.2));
         setStonePos(holdPos);
         if (gameState === GameState.CAUGHT) setTimeout(() => setGameState(GameState.IDLE), 200); 
         break;
 
       case GameState.TOSSING: case GameState.FALLING:
-        // Stone moves independently
         let newVel = stoneVel.clone();
         newVel.y += config.gravity * delta;
         let newPos = stonePos.clone().add(newVel.clone().multiplyScalar(delta));
 
-        // Wall Bounces
-        if (newPos.x > BOUNDS.x) { newPos.x = BOUNDS.x; newVel.x *= -0.6; }
-        else if (newPos.x < -BOUNDS.x) { newPos.x = -BOUNDS.x; newVel.x *= -0.6; }
-        if (newPos.y > BOUNDS.yTop) { newPos.y = BOUNDS.yTop; newVel.y *= -0.3; }
+        if (newPos.x > 5) { newPos.x = 5; newVel.x *= -0.6; }
+        else if (newPos.x < -5) { newPos.x = -5; newVel.x *= -0.6; }
+        if (newPos.y > 5) { newPos.y = 5; newVel.y *= -0.3; }
         
         setStoneVel(newVel);
         setStonePos(newPos);
@@ -259,10 +278,9 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail }: an
 
         if (newVel.y < 0) setGameState(GameState.FALLING);
 
-        // Catch
         if (gameState === GameState.FALLING && newPos.distanceTo(handPos.current) < config.catchRadius) {
            if (currentStage && !actionPerformed) {
-              setMessage("MISSED THE ACTION!");
+              setMessage("MISSED ACTION!");
            } else {
               setStonesInHand(s => s + 1); 
               const nextStageIndex = currentStageIndex + 1;
@@ -274,12 +292,13 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail }: an
                 setGameState(GameState.CAUGHT);
                 setCurrentStageIndex(nextStageIndex);
                 setMessage(config.stages[nextStageIndex].message);
+                // FIXED: Reset action flag for next stage
+                setActionPerformed(false); 
                 onProgress({ stage: nextStageIndex, totalStages: config.stages.length });
               }
            }
         }
-        // Drop
-        if (newPos.y < BOUNDS.yBottom) {
+        if (newPos.y < -6) {
           setGameState(GameState.DROPPED);
           setMessage("DROPPED!");
           onFail();
@@ -290,6 +309,8 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail }: an
             setStonesInHand(config.initialHandStones);
             setGameState(GameState.IDLE);
             setMessage(stage.message);
+            setActionPerformed(false);
+            setCanToss(true);
             onProgress({ stage: 0, totalStages: config.stages.length });
           }, 1500);
         }
@@ -297,39 +318,30 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail }: an
     }
   });
 
-  const isGrabbing = isPinching.current;
-
   return (
     <>
       <ambientLight intensity={0.6} />
       <pointLight position={[10, 10, 10]} color="#fbbf24" intensity={1} />
       <directionalLight position={[0, 5, 5]} intensity={0.5} />
 
-      <MannequinHand position={handPos.current} stonesInHand={stonesInHand-1} isGrabbing={isGrabbing} />
+      <MannequinHand position={handPos.current} stonesInHand={stonesInHand-1} isGrabbing={isPinching.current} canToss={canToss} />
       
       {gameState !== GameState.DROPPED && <BatuSandbag position={stonePos} rotation={stoneRot} />}
       <GroundStones count={stonesOnGround} />
 
-      <mesh position={[0, PICKUP_THRESHOLD_Y - 1, 0]}>
+      <mesh position={[0, -3.5, 0]}>
         <planeGeometry args={[12, 3]} />
         <meshBasicMaterial color={actionPerformed ? "#22c55e" : "#ea580c"} transparent opacity={0.15} />
       </mesh>
       
-      {/* Invisible Click Zone for Tapping */}
-      <mesh position={[0, 0, 5]} onClick={triggerToss} visible={false}>
-         <planeGeometry args={[20, 20]} />
-      </mesh>
-
-      <Text position={[0, PICKUP_THRESHOLD_Y - 0.5, 0]} fontSize={0.3} color="white" fillOpacity={0.5}>
-         DIP HAND HERE
+      {/* Dynamic Text Instructions */}
+      <Text position={[0, -2.5, 0]} fontSize={0.3} color="white" fillOpacity={canToss ? 0.3 : 1}>
+         {canToss ? "DIP HAND HERE" : "⬇️ DIP HAND TO RELOAD"}
       </Text>
-      <Text position={[0, 2.5, 0]} fontSize={0.5} color="white" anchorX="center" anchorY="middle">
-        {message}
+      <Text position={[0, 2.0, 0]} fontSize={0.3} color="white" fillOpacity={canToss ? 1 : 0.3}>
+         {canToss ? "⬆️ RAISE HAND TO TOSS" : "WAIT..."}
       </Text>
-      {/* Debug Speed Meter */}
-      <Text position={[-4, 3, 0]} fontSize={0.2} color="white" anchorX="left">
-         Speed: {Math.abs(velocity.current.y).toFixed(1)} (Need 0.8)
-      </Text>
+      <Text position={[0, 3.5, 0]} fontSize={0.5} color="white" anchorX="center" anchorY="middle">{message}</Text>
     </>
   );
 };
@@ -337,6 +349,8 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail }: an
 // --- Main Game Component ---
 const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
   const webcamRef = useRef<Webcam>(null);
+  const manualTossRef = useRef<HTMLButtonElement>(null);
+  const isMobile = useMemo(() => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent), []);
   const [level, setLevel] = useState(1);
   const [progress, setProgress] = useState({ stage: 0, totalStages: 1 });
   const [showOverlay, setShowOverlay] = useState(false);
@@ -356,60 +370,65 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
     }, 2500);
   };
 
-  const toggleCamera = () => {
-    setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
-  };
-
   return (
     <div className="h-screen w-full bg-heritage-black relative overflow-hidden">
       <Webcam
         key={facingMode} 
         ref={webcamRef} audio={false} mirrored={facingMode === 'user'}
-        className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none" // Ensure clicks go through
-        videoConstraints={{ width: VIDEO_WIDTH, height: VIDEO_HEIGHT, facingMode }}
+        playsInline={true} muted={true}
+        className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none"
+        videoConstraints={{
+            width: isMobile ? MOBILE_VIDEO_WIDTH : 640,
+            height: isMobile ? MOBILE_VIDEO_HEIGHT : 480,
+            facingMode
+        }}
       />
       
       <div className="absolute inset-0 z-10">
         <Canvas camera={{ position: [0, 0, 7], fov: 50 }}>
-          <GameScene webcamRef={webcamRef} level={level} onProgress={setProgress} onLevelComplete={handleLevelComplete} onFail={() => {}} />
+          <GameScene 
+             webcamRef={webcamRef} 
+             level={level} 
+             onProgress={setProgress} 
+             onLevelComplete={handleLevelComplete} 
+             onFail={() => {}} 
+             isMobile={isMobile}
+             manualTossRef={manualTossRef}
+          />
         </Canvas>
       </div>
 
-      {/* HUD */}
-      <div className="absolute top-24 left-6 z-20 w-80 pointer-events-none">
+      <button 
+        ref={manualTossRef}
+        className="absolute bottom-20 right-6 z-50 bg-heritage-orange/80 active:bg-heritage-orange text-white w-24 h-24 rounded-full border-4 border-white/20 shadow-xl flex items-center justify-center font-bold tracking-widest animate-pulse"
+      >
+        TOSS
+      </button>
+
+      <div className="absolute top-24 left-6 z-20 w-64 pointer-events-none">
         <div className="bg-heritage-black/80 border border-heritage-orange/50 p-4 rounded-lg backdrop-blur-md shadow-lg">
           <h3 className="text-heritage-orange font-serif text-lg font-bold">{currentConfig.name}</h3>
-          <p className="text-heritage-gray text-[12px] uppercase tracking-widest mb-2 h-4">{currentConfig.stages[progress.stage]?.message || "Loading..."}</p>
-          <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden mb-3">
+          <p className="text-heritage-gray text-[10px] uppercase tracking-widest mb-2 h-4">{currentConfig.stages[progress.stage]?.message}</p>
+          <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden mb-2">
              <div className="bg-heritage-orange h-full transition-all duration-300" style={{ width: `${progressPercent}%` }} />
-          </div>
-          <div className="flex justify-between text-xs text-heritage-gray mt-2">
-             <span>Stage {progress.stage + 1}/{progress.totalStages}</span>
-             <span>Level {level}/8</span>
           </div>
         </div>
       </div>
 
-      <button onClick={toggleCamera} className="absolute top-24 right-6 z-50 bg-black/60 text-white p-3 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors">
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
+      <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="absolute top-24 right-6 z-50 bg-black/60 text-white p-3 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
       </button>
 
       <div className="absolute bottom-10 w-full text-center pointer-events-none z-20">
         <p className="text-heritage-cream/90 text-sm font-bold bg-black/60 inline-block px-6 py-2 rounded-full border border-white/10">
-           TAP SCREEN or FLICK HAND UP TO TOSS
+           DIP HAND TO LOAD • RAISE TO TOSS
         </p>
       </div>
 
       {showOverlay && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-heritage-black/90 backdrop-blur-sm animate-pulse">
-          <div className="text-center transform scale-110 transition-transform">
-            <div className="text-6xl mb-4">🏆</div>
-            <h1 className="text-5xl font-serif text-heritage-orange mb-4 drop-shadow-[0_0_15px_rgba(234,88,12,0.8)]">
-              {overlayMsg}
-            </h1>
-            <p className="text-white text-lg tracking-[0.5em]">NEXT CHALLENGE AWAITS</p>
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-heritage-black/90 backdrop-blur-sm">
+          <div className="text-center animate-bounce">
+            <h1 className="text-5xl font-serif text-heritage-orange mb-4 drop-shadow-[0_0_15px_rgba(234,88,12,0.8)]">{overlayMsg}</h1>
           </div>
         </div>
       )}
