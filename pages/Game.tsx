@@ -7,8 +7,6 @@ import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 // --- Configuration ---
-// FIX 1: Requesting 1080p (High Res) often triggers the "Wide" lens on Android/iOS
-// instead of the cropped video stabilization lens.
 const MOBILE_CONSTRAINTS = {
   width: { ideal: 1080 },
   height: { ideal: 1920 },
@@ -33,14 +31,14 @@ interface StageConfig { action: StageAction; count: number; message: string; }
 interface LevelConfig { id: number; name: string; stages: StageConfig[]; gravity: number; catchRadius: number; initialHandStones: number; initialGroundStones: number; }
 
 const LEVELS: Record<number, LevelConfig> = {
-  1: { id: 1, name: "LEVEL 1: BUAH SATU", stages: [{ action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -10, catchRadius: 3.0, initialHandStones: 1, initialGroundStones: 4 },
-  2: { id: 2, name: "LEVEL 2: BUAH DUA", stages: [{ action: 'PICK', count: 2, message: "PICK 2 STONES" }, { action: 'PICK', count: 2, message: "PICK 2 STONES" }], gravity: -12, catchRadius: 2.5, initialHandStones: 1, initialGroundStones: 4 },
-  3: { id: 3, name: "LEVEL 3: BUAH TIGA", stages: [{ action: 'PICK', count: 3, message: "PICK 3 STONES" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -14, catchRadius: 2.2, initialHandStones: 1, initialGroundStones: 4 },
-  4: { id: 4, name: "LEVEL 4: BUAH EMPAT", stages: [{ action: 'PICK', count: 4, message: "PICK ALL 4 STONES" }], gravity: -15, catchRadius: 2.0, initialHandStones: 1, initialGroundStones: 4 },
-  5: { id: 5, name: "LEVEL 5: BUAH LIMA", stages: [{ action: 'PLACE', count: 4, message: "PLACE 4 STONES" }, { action: 'PICK', count: 4, message: "PICK ALL 4" }], gravity: -15, catchRadius: 2.0, initialHandStones: 5, initialGroundStones: 0 },
-  6: { id: 6, name: "LEVEL 6: TUKAR", stages: [{ action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }], gravity: -16, catchRadius: 1.8, initialHandStones: 2, initialGroundStones: 3 },
-  7: { id: 7, name: "LEVEL 7: ADVANCED", stages: [{ action: 'PICK', count: 1, message: "PICK 1 (FAST)" }, { action: 'PICK', count: 3, message: "PICK 3 (FAST)" }], gravity: -18, catchRadius: 1.5, initialHandStones: 1, initialGroundStones: 4 },
-  8: { id: 8, name: "LEVEL 8: TIMBANG", stages: [{ action: 'PICK', count: 4, message: "CHALLENGE: PICK ALL!" }], gravity: -20, catchRadius: 1.2, initialHandStones: 1, initialGroundStones: 4 },
+  1: { id: 1, name: "LEVEL 1: BUAH SATU", stages: [{ action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -10, catchRadius: 3.5, initialHandStones: 1, initialGroundStones: 4 },
+  2: { id: 2, name: "LEVEL 2: BUAH DUA", stages: [{ action: 'PICK', count: 2, message: "PICK 2 STONES" }, { action: 'PICK', count: 2, message: "PICK 2 STONES" }], gravity: -12, catchRadius: 3.0, initialHandStones: 1, initialGroundStones: 4 },
+  3: { id: 3, name: "LEVEL 3: BUAH TIGA", stages: [{ action: 'PICK', count: 3, message: "PICK 3 STONES" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -14, catchRadius: 2.8, initialHandStones: 1, initialGroundStones: 4 },
+  4: { id: 4, name: "LEVEL 4: BUAH EMPAT", stages: [{ action: 'PICK', count: 4, message: "PICK ALL 4 STONES" }], gravity: -15, catchRadius: 2.5, initialHandStones: 1, initialGroundStones: 4 },
+  5: { id: 5, name: "LEVEL 5: BUAH LIMA", stages: [{ action: 'PLACE', count: 4, message: "PLACE 4 STONES" }, { action: 'PICK', count: 4, message: "PICK ALL 4" }], gravity: -15, catchRadius: 2.5, initialHandStones: 5, initialGroundStones: 0 },
+  6: { id: 6, name: "LEVEL 6: TUKAR", stages: [{ action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }], gravity: -16, catchRadius: 2.2, initialHandStones: 2, initialGroundStones: 3 },
+  7: { id: 7, name: "LEVEL 7: ADVANCED", stages: [{ action: 'PICK', count: 1, message: "PICK 1 (FAST)" }, { action: 'PICK', count: 3, message: "PICK 3 (FAST)" }], gravity: -18, catchRadius: 2.0, initialHandStones: 1, initialGroundStones: 4 },
+  8: { id: 8, name: "LEVEL 8: TIMBANG", stages: [{ action: 'PICK', count: 4, message: "CHALLENGE: PICK ALL!" }], gravity: -20, catchRadius: 1.8, initialHandStones: 1, initialGroundStones: 4 },
 };
 
 // --- MediaPipe Hook ---
@@ -87,19 +85,16 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
         
         let x, y;
         if (isMobile) {
-            // Updated mapping for wider camera FOV
-            // Because we zoomed out the camera, we need to multiply these by a larger number
-            // so the hand can still reach the edges of the screen
-            x = -((landmarks[8].x - 0.5) * 16); // Increased from 12
-            y = -(landmarks[8].y - 0.55) * 20; // Increased from 16
+            // Tuned for Camera Z=10
+            x = -((landmarks[8].x - 0.5) * 14); // Sensitivity X
+            y = -(landmarks[8].y - 0.55) * 18; // Sensitivity Y
         } else {
             x = -((landmarks[8].x - 0.5) * 14); 
             y = -(landmarks[8].y - 0.5) * 10;
         }
 
-        // Expanded bounds so you can reach the corners
-        x = Math.max(-8, Math.min(8, x));
-        y = Math.max(-10, Math.min(8, y));
+        x = Math.max(-7, Math.min(7, x));
+        y = Math.max(-9, Math.min(7, y));
 
         handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.4); 
 
@@ -126,8 +121,8 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
       const targetRot = isGrabbing ? -0.8 : 0;
       group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.2);
       
-      // FIX 3: Reduced scale from 0.65 to 0.5 to make it look further away
-      const scale = isMobile ? 0.5 : 1.0;
+      // FIX: Increased scale back to >1.0 so it looks normal size
+      const scale = isMobile ? 1.2 : 1.4;
       group.current.scale.set(scale, scale, scale);
     }
   });
@@ -391,8 +386,8 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
       />
       
       <div className="absolute inset-0 z-10">
-        {/* FIX 2: Moved Camera Back (z=12) and increased FOV */}
-        <Canvas camera={{ position: [0, 0, 12], fov: isMobile ? 75 : 50 }}>
+        {/* FIX: Set Camera Z to 10 (Balanced distance) */}
+        <Canvas camera={{ position: [0, 0, 10], fov: isMobile ? 75 : 50 }}>
           <GameScene 
              webcamRef={webcamRef} 
              level={level} 
