@@ -7,8 +7,19 @@ import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 // --- Configuration ---
-const MOBILE_VIDEO_WIDTH = 360;
-const MOBILE_VIDEO_HEIGHT = 640;
+// Requesting HD resolution (720p) prevents the "Zoom Crop" on most phones
+const MOBILE_CONSTRAINTS = {
+  width: { ideal: 720 },
+  height: { ideal: 1280 },
+  facingMode: "environment"
+};
+
+const DESKTOP_CONSTRAINTS = {
+  width: 1280,
+  height: 720,
+  facingMode: "user"
+};
+
 const BOUNDS = { x: 4.5, yTop: 4.0, yBottom: -5 }; 
 const PICKUP_THRESHOLD_Y = -2.0; 
 const TOSS_THRESHOLD_Y = 0.8; 
@@ -73,20 +84,18 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
       if (result.landmarks && result.landmarks.length > 0) {
         const landmarks = result.landmarks[0];
         
-        // --- MOBILE OPTIMIZED MAPPING ---
         let x, y;
         if (isMobile) {
-            // Wider X range for mobile so you can reach edges
-            // Higher Y offset so hand isn't stuck at bottom
-            x = -((landmarks[8].x - 0.5) * 10); 
-            y = -(landmarks[8].y - 0.55) * 14; 
+            // Updated mapping for wider camera FOV
+            x = -((landmarks[8].x - 0.5) * 12); 
+            y = -(landmarks[8].y - 0.55) * 16; 
         } else {
             x = -((landmarks[8].x - 0.5) * 14); 
             y = -(landmarks[8].y - 0.5) * 10;
         }
 
         x = Math.max(-6, Math.min(6, x));
-        y = Math.max(-7, Math.min(6, y));
+        y = Math.max(-8, Math.min(6, y));
 
         handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.4); 
 
@@ -113,8 +122,8 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
       const targetRot = isGrabbing ? -0.8 : 0;
       group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.2);
       
-      // SHRINK HAND ON MOBILE so it doesn't block the view
-      const scale = isMobile ? 0.75 : 1.0;
+      // Hand size fine-tuned for new FOV
+      const scale = isMobile ? 0.65 : 1.0;
       group.current.scale.set(scale, scale, scale);
     }
   });
@@ -327,13 +336,14 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
         <meshBasicMaterial color={actionPerformed ? "#22c55e" : "#ea580c"} transparent opacity={0.15} />
       </mesh>
       
-      <Text position={[0, -2.5, 0]} fontSize={isMobile ? 0.4 : 0.3} color="white" fillOpacity={canToss ? 0.3 : 1}>
+      {/* UI scaled for Mobile */}
+      <Text position={[0, -2.5, 0]} fontSize={isMobile ? 0.35 : 0.3} color="white" fillOpacity={canToss ? 0.3 : 1}>
          {canToss ? "DIP HAND HERE" : "⬇️ RELOAD"}
       </Text>
-      <Text position={[0, 2.0, 0]} fontSize={isMobile ? 0.4 : 0.3} color="white" fillOpacity={canToss ? 1 : 0.3}>
+      <Text position={[0, 2.0, 0]} fontSize={isMobile ? 0.35 : 0.3} color="white" fillOpacity={canToss ? 1 : 0.3}>
          {canToss ? "⬆️ TOSS" : "WAIT..."}
       </Text>
-      <Text position={[0, 3.5, 0]} fontSize={isMobile ? 0.6 : 0.5} color="white" anchorX="center" anchorY="middle">{message}</Text>
+      <Text position={[0, 3.5, 0]} fontSize={isMobile ? 0.5 : 0.5} color="white" anchorX="center" anchorY="middle">{message}</Text>
     </>
   );
 };
@@ -362,6 +372,10 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
     }, 2500);
   };
 
+  const videoConstraints = isMobile 
+    ? { width: { ideal: 720 }, height: { ideal: 1280 }, facingMode }
+    : { width: 640, height: 480, facingMode };
+
   return (
     <div className="h-screen w-full bg-heritage-black relative overflow-hidden">
       <Webcam
@@ -369,16 +383,12 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         ref={webcamRef} audio={false} mirrored={facingMode === 'user'}
         playsInline={true} muted={true}
         className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none"
-        videoConstraints={{
-            width: isMobile ? MOBILE_VIDEO_WIDTH : 640,
-            height: isMobile ? MOBILE_VIDEO_HEIGHT : 480,
-            facingMode
-        }}
+        videoConstraints={videoConstraints}
       />
       
       <div className="absolute inset-0 z-10">
-        {/* Adjusted FOV for Mobile to look "Zoomed Out" */}
-        <Canvas camera={{ position: [0, 0, 7], fov: isMobile ? 75 : 50 }}>
+        {/* WIDER FOV ON MOBILE to simulate Zoom Out */}
+        <Canvas camera={{ position: [0, 0, 7], fov: isMobile ? 80 : 50 }}>
           <GameScene 
              webcamRef={webcamRef} 
              level={level} 
@@ -398,9 +408,9 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         TOSS
       </button>
 
-      {/* Responsive HUD */}
-      <div className={`absolute ${isMobile ? 'top-4 left-1/2 transform -translate-x-1/2 w-80' : 'top-24 left-6 w-64'} z-20 pointer-events-none`}>
-        <div className="bg-heritage-black/80 border border-heritage-orange/50 p-3 rounded-lg backdrop-blur-md shadow-lg text-center md:text-left">
+      {/* HUD - Mobile Optimized */}
+      <div className={`absolute ${isMobile ? 'top-4 left-1/2 transform -translate-x-1/2 w-[90%]' : 'top-24 left-6 w-64'} z-20 pointer-events-none`}>
+        <div className="bg-heritage-black/80 border border-heritage-orange/50 p-3 rounded-lg backdrop-blur-md shadow-lg text-center md:text-left flex flex-col items-center md:items-start">
           <h3 className="text-heritage-orange font-serif text-lg font-bold">{currentConfig.name}</h3>
           <p className="text-heritage-gray text-[10px] uppercase tracking-widest mb-1 h-4">{currentConfig.stages[progress.stage]?.message}</p>
           <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden mb-1">
