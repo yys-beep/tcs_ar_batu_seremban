@@ -19,36 +19,33 @@ const DESKTOP_CONSTRAINTS = {
   facingMode: "user"
 };
 
-const BOUNDS = { x: 4.5, yTop: 4.0, yBottom: -5 }; 
 const PICKUP_THRESHOLD_Y = -2.0; 
-const TOSS_THRESHOLD_Y = 0.8; 
 const RELOAD_THRESHOLD_Y = -1.0; 
+// TOSS Threshold lowered so it's easier to trigger on mobile
+const TOSS_THRESHOLD_Y = 0.5; 
 
-// --- Types ---
 enum GameState { IDLE, HOLDING, TOSSING, FALLING, CAUGHT, DROPPED, LEVEL_COMPLETE, GAME_OVER }
 type StageAction = 'PICK' | 'PLACE' | 'EXCHANGE';
 interface StageConfig { action: StageAction; count: number; message: string; }
 interface LevelConfig { id: number; name: string; stages: StageConfig[]; gravity: number; catchRadius: number; initialHandStones: number; initialGroundStones: number; }
 
 const LEVELS: Record<number, LevelConfig> = {
-  1: { id: 1, name: "LEVEL 1: BUAH SATU", stages: [{ action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -10, catchRadius: 4.5, initialHandStones: 1, initialGroundStones: 4 },
-  2: { id: 2, name: "LEVEL 2: BUAH DUA", stages: [{ action: 'PICK', count: 2, message: "PICK 2 STONES" }, { action: 'PICK', count: 2, message: "PICK 2 STONES" }], gravity: -12, catchRadius: 4.0, initialHandStones: 1, initialGroundStones: 4 },
-  3: { id: 3, name: "LEVEL 3: BUAH TIGA", stages: [{ action: 'PICK', count: 3, message: "PICK 3 STONES" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -14, catchRadius: 3.8, initialHandStones: 1, initialGroundStones: 4 },
-  4: { id: 4, name: "LEVEL 4: BUAH EMPAT", stages: [{ action: 'PICK', count: 4, message: "PICK ALL 4 STONES" }], gravity: -15, catchRadius: 3.5, initialHandStones: 1, initialGroundStones: 4 },
-  5: { id: 5, name: "LEVEL 5: BUAH LIMA", stages: [{ action: 'PLACE', count: 4, message: "PLACE 4 STONES" }, { action: 'PICK', count: 4, message: "PICK ALL 4" }], gravity: -15, catchRadius: 3.5, initialHandStones: 5, initialGroundStones: 0 },
-  6: { id: 6, name: "LEVEL 6: TUKAR", stages: [{ action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }], gravity: -16, catchRadius: 3.2, initialHandStones: 2, initialGroundStones: 3 },
-  7: { id: 7, name: "LEVEL 7: ADVANCED", stages: [{ action: 'PICK', count: 1, message: "PICK 1 (FAST)" }, { action: 'PICK', count: 3, message: "PICK 3 (FAST)" }], gravity: -18, catchRadius: 3.0, initialHandStones: 1, initialGroundStones: 4 },
-  8: { id: 8, name: "LEVEL 8: TIMBANG", stages: [{ action: 'PICK', count: 4, message: "CHALLENGE: PICK ALL!" }], gravity: -20, catchRadius: 2.8, initialHandStones: 1, initialGroundStones: 4 },
+  1: { id: 1, name: "LEVEL 1: BUAH SATU", stages: [{ action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -10, catchRadius: 5.0, initialHandStones: 1, initialGroundStones: 4 },
+  2: { id: 2, name: "LEVEL 2: BUAH DUA", stages: [{ action: 'PICK', count: 2, message: "PICK 2 STONES" }, { action: 'PICK', count: 2, message: "PICK 2 STONES" }], gravity: -12, catchRadius: 4.5, initialHandStones: 1, initialGroundStones: 4 },
+  3: { id: 3, name: "LEVEL 3: BUAH TIGA", stages: [{ action: 'PICK', count: 3, message: "PICK 3 STONES" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -14, catchRadius: 4.0, initialHandStones: 1, initialGroundStones: 4 },
+  4: { id: 4, name: "LEVEL 4: BUAH EMPAT", stages: [{ action: 'PICK', count: 4, message: "PICK ALL 4 STONES" }], gravity: -15, catchRadius: 3.8, initialHandStones: 1, initialGroundStones: 4 },
+  5: { id: 5, name: "LEVEL 5: BUAH LIMA", stages: [{ action: 'PLACE', count: 4, message: "PLACE 4 STONES" }, { action: 'PICK', count: 4, message: "PICK ALL 4" }], gravity: -15, catchRadius: 3.8, initialHandStones: 5, initialGroundStones: 0 },
+  6: { id: 6, name: "LEVEL 6: TUKAR", stages: [{ action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }], gravity: -16, catchRadius: 3.5, initialHandStones: 2, initialGroundStones: 3 },
+  7: { id: 7, name: "LEVEL 7: ADVANCED", stages: [{ action: 'PICK', count: 1, message: "PICK 1 (FAST)" }, { action: 'PICK', count: 3, message: "PICK 3 (FAST)" }], gravity: -18, catchRadius: 3.2, initialHandStones: 1, initialGroundStones: 4 },
+  8: { id: 8, name: "LEVEL 8: TIMBANG", stages: [{ action: 'PICK', count: 4, message: "CHALLENGE: PICK ALL!" }], gravity: -20, catchRadius: 3.0, initialHandStones: 1, initialGroundStones: 4 },
 };
 
-// --- MediaPipe Hook (Updated for Exact Viewport Mapping) ---
+// --- MediaPipe Hook ---
 const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean, facingMode: string) => {
   const handPos = useRef(new THREE.Vector3(0, -3, 0)); 
   const isPinching = useRef(false);
   const landmarkerRef = useRef<HandLandmarker | null>(null);
   const lastVideoTime = useRef(-1);
-  
-  // Get the EXACT size of the 3D world at current depth
   const { viewport } = useThree(); 
 
   useEffect(() => {
@@ -64,7 +61,7 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
           },
           runningMode: "VIDEO",
           numHands: 1,
-          minHandDetectionConfidence: 0.3,
+          minHandDetectionConfidence: 0.3, 
           minHandPresenceConfidence: 0.3,
           minTrackingConfidence: 0.3
         });
@@ -86,39 +83,31 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
       if (result.landmarks && result.landmarks.length > 0) {
         const landmarks = result.landmarks[0];
         
-        // FIX: Coordinate Mapping
-        // 0.5 is center. 
-        // If facingMode is 'user' (selfie), we mirror (multiply by negative width).
-        // If facingMode is 'environment' (back), we DON'T mirror (multiply by positive width).
-        
-        let xMultiplier = viewport.width; // Use exact screen width
-        let yMultiplier = viewport.height; // Use exact screen height
-        
-        // CORRECTION: Usually MediaPipe x=0 is Left. 
-        // If webcam is mirrored on screen, x movement needs to be flipped to match visual.
-        // If user says "Real Right is Model Left", we need to FLIP the sign.
-        
+        // FIX 1: HIGH SENSITIVITY MULTIPLIER
+        // We multiply the viewport width by 2.5. 
+        // This means moving your hand 40% across the camera moves it 100% across the screen.
+        const sensitivity = 2.5; 
+        let xMultiplier = viewport.width * sensitivity; 
+        let yMultiplier = viewport.height * sensitivity; 
+
         let x;
         if (facingMode === 'user') {
-             // Selfie Mode: Standard Mirror
+             // Selfie Mode: Mirror
              x = -(landmarks[8].x - 0.5) * xMultiplier;
         } else {
-             // Back Camera: User reported inverted controls. 
-             // We REMOVE the negative sign to fix "Right hand = Left Model".
-             // Now Right Hand (x>0.5) => Positive X (Right Model)
+             // Back Camera: Direct Mapping
              x = (landmarks[8].x - 0.5) * xMultiplier; 
         }
 
-        // Adjust Y (Up is 0 in MediaPipe usually, Down is 1)
-        // In 3js, Up is Positive. So we invert Y.
         let y = -(landmarks[8].y - 0.55) * yMultiplier; 
 
-        // Clamp to screen edges
+        // Clamp to screen edges so it doesn't fly away
         x = Math.max(-viewport.width/2 + 0.5, Math.min(viewport.width/2 - 0.5, x));
         y = Math.max(-viewport.height/2 + 0.5, Math.min(viewport.height/2 - 0.5, y));
 
-        // Smooth movement
-        handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.5); 
+        // FIX 2: INSTANT REACTION (REDUCED LAG)
+        // Increased lerp from 0.5 to 0.8. This feels "snappy" and reduces perceived lag.
+        handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.8); 
 
         const dx = landmarks[4].x - landmarks[8].x;
         const dy = landmarks[4].y - landmarks[8].y;
@@ -142,9 +131,10 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
       const targetRot = isGrabbing ? -0.8 : 0;
       group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.4);
       
-      // FIX: Size Increase
-      // Made hands significantly bigger (2.0) so they don't look tiny on PC or Phone
-      const scale = isMobile ? 2.0 : 2.2;
+      // FIX 3: SIZE ADJUSTMENT
+      // Mobile: 1.2 (Normal size, not huge)
+      // PC: 2.2 (Big enough to see on monitor)
+      const scale = isMobile ? 1.2 : 2.2;
       group.current.scale.set(scale, scale, scale);
     }
   });
@@ -209,7 +199,6 @@ const GroundStones = ({ count }: { count: number }) => (
 
 // --- Game Logic ---
 const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMobile, manualTossRef, facingMode }: any) => {
-  // Pass facingMode to the hook to fix the Inverted/Mirror issue
   const { handPos, isPinching } = useMediaPipeInput(webcamRef, isMobile, facingMode);
   const config = LEVELS[level as number];
   
@@ -358,7 +347,6 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
         <meshBasicMaterial color={actionPerformed ? "#22c55e" : "#ea580c"} transparent opacity={0.15} />
       </mesh>
       
-      {/* UI scaled for Mobile */}
       <Text position={[0, -2.5, 0]} fontSize={isMobile ? 0.35 : 0.3} color="white" fillOpacity={canToss ? 0.3 : 1}>
          {canToss ? "DIP HAND HERE" : "⬇️ RELOAD"}
       </Text>
@@ -410,8 +398,8 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
       />
       
       <div className="absolute inset-0 z-10">
-        {/* FIX: Moved Camera CLOSER (Z=8) so it looks big on PC/Mobile */}
-        <Canvas dpr={[1, 1.5]} camera={{ position: [0, 0, 8], fov: isMobile ? 75 : 50 }}>
+        {/* FIX: Set DPR to 1 for Maximum Speed on Mobile */}
+        <Canvas dpr={[1, 1]} camera={{ position: [0, 0, 8], fov: isMobile ? 75 : 50 }}>
           <GameScene 
              webcamRef={webcamRef} 
              level={level} 
@@ -432,7 +420,7 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         TOSS
       </button>
 
-      {/* Top Banner (Level Info) */}
+      {/* Top Banner */}
       <div className={`absolute ${isMobile ? 'top-4 left-1/2 transform -translate-x-1/2 w-[90%]' : 'top-24 left-6 w-64'} z-20 pointer-events-none`}>
         <div className="bg-heritage-black/80 border border-heritage-orange/50 p-3 rounded-lg backdrop-blur-md shadow-lg text-center md:text-left flex flex-col items-center md:items-start">
           <h3 className="text-heritage-orange font-serif text-lg font-bold">{currentConfig.name}</h3>
@@ -443,14 +431,10 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         </div>
       </div>
 
-      {/* Control Buttons (Bottom Corners) */}
+      {/* Controls */}
       <div className="absolute bottom-6 left-6 z-50">
         <button onClick={() => setFitMode(prev => prev === 'cover' ? 'contain' : 'cover')} className="bg-black/60 text-white w-12 h-12 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors flex items-center justify-center">
-            {fitMode === 'cover' ? (
-                <span className="text-[10px] font-bold">UNZOOM</span>
-            ) : (
-                <span className="text-[10px] font-bold">FILL</span>
-            )}
+            {fitMode === 'cover' ? <span className="text-[10px] font-bold">UNZOOM</span> : <span className="text-[10px] font-bold">FILL</span>}
         </button>
       </div>
       
