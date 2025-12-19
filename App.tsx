@@ -17,8 +17,8 @@ const App: React.FC = () => {
   
   const handleGameOver = () => {
     setIsGameOver(true);
-    // Optional: add a delay before showing the exit button or automatically returning home
-    setTimeout(() => setActiveTab('home'), 5000); // Return home after 5s
+    // Return home after 5s
+    setTimeout(() => setActiveTab('home'), 5000); 
   }
 
   const renderContent = () => {
@@ -30,7 +30,7 @@ const App: React.FC = () => {
       case 'chat':
         return <Chat />;
       case 'game':
-        return <Game key={Date.now()} onGameOver={handleGameOver} />; // Use key to force re-mount
+        return <Game key={Date.now()} onGameOver={handleGameOver} />;
       default:
         return <Home onStart={handleGameStart} />;
     }
@@ -39,7 +39,9 @@ const App: React.FC = () => {
   const isGameActive = activeTab === 'game';
 
   return (
-    <div className="bg-heritage-black min-h-screen text-white font-sans selection:bg-heritage-orange selection:text-white">
+    // FIX: Changed min-h-screen to h-[100dvh] and added overflow-hidden
+    // This prevents the mobile URL bar from pushing content off-screen
+    <div className="bg-heritage-black h-[100dvh] w-full overflow-hidden text-white font-sans selection:bg-heritage-orange selection:text-white flex flex-col">
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} isGameActive={isGameActive} />
       
       {isGameActive && !isGameOver && (
@@ -51,7 +53,8 @@ const App: React.FC = () => {
           </button>
       )}
 
-      <main>
+      {/* FIX: Main content takes remaining height properly */}
+      <main className="flex-grow relative w-full h-full">
         {renderContent()}
       </main>
 
