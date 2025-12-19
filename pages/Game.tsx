@@ -7,10 +7,14 @@ import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 // --- Configuration ---
+
+// FIX 1: ULTRA-LOW RESOLUTION FOR SPEED
+// We drop to 480p. The background might be slightly blurry, 
+// but the hand tracking will be instant.
 const MOBILE_CONSTRAINTS = {
   facingMode: "environment",
-  width: { ideal: 1280 },
-  height: { ideal: 720 } 
+  width: { ideal: 480 },
+  height: { ideal: 640 } 
 };
 
 const DESKTOP_CONSTRAINTS = {
@@ -30,15 +34,17 @@ type StageAction = 'PICK' | 'PLACE' | 'EXCHANGE';
 interface StageConfig { action: StageAction; count: number; message: string; }
 interface LevelConfig { id: number; name: string; stages: StageConfig[]; gravity: number; catchRadius: number; initialHandStones: number; initialGroundStones: number; }
 
+// FIX 2: LARGER CATCH RADIUS
+// Increased catchRadius to 4.0+ to make it easier to grab even with slight lag.
 const LEVELS: Record<number, LevelConfig> = {
-  1: { id: 1, name: "LEVEL 1: BUAH SATU", stages: [{ action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -10, catchRadius: 3.5, initialHandStones: 1, initialGroundStones: 4 },
-  2: { id: 2, name: "LEVEL 2: BUAH DUA", stages: [{ action: 'PICK', count: 2, message: "PICK 2 STONES" }, { action: 'PICK', count: 2, message: "PICK 2 STONES" }], gravity: -12, catchRadius: 3.0, initialHandStones: 1, initialGroundStones: 4 },
-  3: { id: 3, name: "LEVEL 3: BUAH TIGA", stages: [{ action: 'PICK', count: 3, message: "PICK 3 STONES" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -14, catchRadius: 2.8, initialHandStones: 1, initialGroundStones: 4 },
-  4: { id: 4, name: "LEVEL 4: BUAH EMPAT", stages: [{ action: 'PICK', count: 4, message: "PICK ALL 4 STONES" }], gravity: -15, catchRadius: 2.5, initialHandStones: 1, initialGroundStones: 4 },
-  5: { id: 5, name: "LEVEL 5: BUAH LIMA", stages: [{ action: 'PLACE', count: 4, message: "PLACE 4 STONES" }, { action: 'PICK', count: 4, message: "PICK ALL 4" }], gravity: -15, catchRadius: 2.5, initialHandStones: 5, initialGroundStones: 0 },
-  6: { id: 6, name: "LEVEL 6: TUKAR", stages: [{ action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }], gravity: -16, catchRadius: 2.2, initialHandStones: 2, initialGroundStones: 3 },
-  7: { id: 7, name: "LEVEL 7: ADVANCED", stages: [{ action: 'PICK', count: 1, message: "PICK 1 (FAST)" }, { action: 'PICK', count: 3, message: "PICK 3 (FAST)" }], gravity: -18, catchRadius: 2.0, initialHandStones: 1, initialGroundStones: 4 },
-  8: { id: 8, name: "LEVEL 8: TIMBANG", stages: [{ action: 'PICK', count: 4, message: "CHALLENGE: PICK ALL!" }], gravity: -20, catchRadius: 1.8, initialHandStones: 1, initialGroundStones: 4 },
+  1: { id: 1, name: "LEVEL 1: BUAH SATU", stages: [{ action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -10, catchRadius: 4.5, initialHandStones: 1, initialGroundStones: 4 },
+  2: { id: 2, name: "LEVEL 2: BUAH DUA", stages: [{ action: 'PICK', count: 2, message: "PICK 2 STONES" }, { action: 'PICK', count: 2, message: "PICK 2 STONES" }], gravity: -12, catchRadius: 4.0, initialHandStones: 1, initialGroundStones: 4 },
+  3: { id: 3, name: "LEVEL 3: BUAH TIGA", stages: [{ action: 'PICK', count: 3, message: "PICK 3 STONES" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -14, catchRadius: 3.8, initialHandStones: 1, initialGroundStones: 4 },
+  4: { id: 4, name: "LEVEL 4: BUAH EMPAT", stages: [{ action: 'PICK', count: 4, message: "PICK ALL 4 STONES" }], gravity: -15, catchRadius: 3.5, initialHandStones: 1, initialGroundStones: 4 },
+  5: { id: 5, name: "LEVEL 5: BUAH LIMA", stages: [{ action: 'PLACE', count: 4, message: "PLACE 4 STONES" }, { action: 'PICK', count: 4, message: "PICK ALL 4" }], gravity: -15, catchRadius: 3.5, initialHandStones: 5, initialGroundStones: 0 },
+  6: { id: 6, name: "LEVEL 6: TUKAR", stages: [{ action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }], gravity: -16, catchRadius: 3.2, initialHandStones: 2, initialGroundStones: 3 },
+  7: { id: 7, name: "LEVEL 7: ADVANCED", stages: [{ action: 'PICK', count: 1, message: "PICK 1 (FAST)" }, { action: 'PICK', count: 3, message: "PICK 3 (FAST)" }], gravity: -18, catchRadius: 3.0, initialHandStones: 1, initialGroundStones: 4 },
+  8: { id: 8, name: "LEVEL 8: TIMBANG", stages: [{ action: 'PICK', count: 4, message: "CHALLENGE: PICK ALL!" }], gravity: -20, catchRadius: 2.8, initialHandStones: 1, initialGroundStones: 4 },
 };
 
 // --- MediaPipe Hook ---
@@ -61,9 +67,9 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
           },
           runningMode: "VIDEO",
           numHands: 1,
-          minHandDetectionConfidence: 0.4,
-          minHandPresenceConfidence: 0.4,
-          minTrackingConfidence: 0.4
+          minHandDetectionConfidence: 0.3, // Lowered for speed
+          minHandPresenceConfidence: 0.3,
+          minTrackingConfidence: 0.3
         });
       } catch (err) {
         console.error("Failed to load MediaPipe:", err);
@@ -85,8 +91,7 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
         
         let x, y;
         if (isMobile) {
-            // FIX 1: Balanced Sensitivity (15 & 19)
-            // This is responsive but less "wild" than 20/24
+            // Sensitivity tuned for low-res
             x = -((landmarks[8].x - 0.5) * 15); 
             y = -(landmarks[8].y - 0.55) * 19; 
         } else {
@@ -94,15 +99,15 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
             y = -(landmarks[8].y - 0.5) * 10;
         }
 
-        // FIX 2: Tighter "Invisible Walls" (Clamping)
-        // This stops the hand from leaving the phone screen edges.
-        // Range reduced from [-8, 8] to [-4.2, 4.2]
+        // Invisible walls
         x = Math.max(-4.2, Math.min(4.2, x));
         y = Math.max(-7.0, Math.min(6.0, y));
 
-        // FIX 3: Smoother Movement (Lerp 0.2)
-        // Lower lerp adds weight and reduces jitter/shaking
-        handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.2); 
+        // FIX 3: INCREASED "SNAP" SPEED
+        // Changed lerp from 0.2 to 0.5. 
+        // 0.2 = Smooth but laggy
+        // 0.5 = Fast but slightly jittery (Better for gaming)
+        handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.5); 
 
         const dx = landmarks[4].x - landmarks[8].x;
         const dy = landmarks[4].y - landmarks[8].y;
@@ -125,7 +130,8 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
       group.current.position.copy(position);
       group.current.rotation.z = -position.x * 0.1;
       const targetRot = isGrabbing ? -0.8 : 0;
-      group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.2);
+      // Faster rotation snap for grabbing visual
+      group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.4);
       
       const scale = isMobile ? 1.2 : 1.4;
       group.current.scale.set(scale, scale, scale);
@@ -134,12 +140,13 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
 
   const Finger = ({ x, length, rotZ = 0 }: { x: number, length: number, rotZ?: number }) => (
     <group position={[x, 0.6, 0]} rotation={[0, 0, rotZ]}>
-      <Sphere args={[0.13]} position={[0, 0, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
-      <Cylinder args={[0.12, 0.13, length/2]} position={[0, length/4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
-      <Sphere args={[0.11]} position={[0, length/2, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
+      {/* Reduced geometry complexity for mobile performance */}
+      <Sphere args={[0.13, 8, 8]} position={[0, 0, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
+      <Cylinder args={[0.12, 0.13, length/2, 8]} position={[0, length/4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
+      <Sphere args={[0.11, 8, 8]} position={[0, length/2, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
       <group position={[0, length/2, 0]} rotation={[isGrabbing ? 1.5 : 0.1, 0, 0]}>
-         <Cylinder args={[0.1, 0.11, length/2]} position={[0, length/4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
-         <Sphere args={[0.1]} position={[0, length/2, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
+         <Cylinder args={[0.1, 0.11, length/2, 8]} position={[0, length/4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
+         <Sphere args={[0.1, 8, 8]} position={[0, length/2, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
       </group>
     </group>
   );
@@ -147,19 +154,19 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
   return (
     <group ref={group}>
       <group scale={[1, 1, 0.6]}>
-         <Sphere args={[0.6]} position={[0, 0, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
-         <Cylinder args={[0.55, 0.5, 0.8]} position={[0, -0.4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
+         <Sphere args={[0.6, 16, 16]} position={[0, 0, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
+         <Cylinder args={[0.55, 0.5, 0.8, 16]} position={[0, -0.4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
       </group>
       <Finger x={-0.4} length={0.7} rotZ={0.2} />
       <Finger x={-0.15} length={0.9} rotZ={0.05} />
       <Finger x={0.15} length={1.0} rotZ={-0.05} />
       <Finger x={0.4} length={0.9} rotZ={-0.2} />
       <group position={[0.5, -0.2, 0.2]} rotation={[0, -0.5, -0.8]}>
-        <Cylinder args={[0.13, 0.15, 0.5]} position={[0, 0.25, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
-        <Sphere args={[0.13]} position={[0, 0.5, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
+        <Cylinder args={[0.13, 0.15, 0.5, 8]} position={[0, 0.25, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
+        <Sphere args={[0.13, 8, 8]} position={[0, 0.5, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
         <group position={[0, 0.5, 0]} rotation={[isGrabbing ? 1.0 : 0, 0, 0]}>
-           <Cylinder args={[0.11, 0.13, 0.4]} position={[0, 0.2, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
-           <Sphere args={[0.11]} position={[0, 0.4, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
+           <Cylinder args={[0.11, 0.13, 0.4, 8]} position={[0, 0.2, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
+           <Sphere args={[0.11, 8, 8]} position={[0, 0.4, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
         </group>
       </group>
       {Array.from({ length: stonesInHand }).map((_, i) => (
