@@ -1,13 +1,12 @@
 /// <reference types="@react-three/fiber" />
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import Webcam from 'react-webcam';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Cylinder, Sphere, Tetrahedron, Float, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 // --- Configuration ---
-// Low resolution for maximum FPS on mobile
 const MOBILE_CONSTRAINTS = {
   facingMode: "environment",
   width: { ideal: 480 },
@@ -20,6 +19,7 @@ const DESKTOP_CONSTRAINTS = {
   facingMode: "user"
 };
 
+const BOUNDS = { x: 4.5, yTop: 4.0, yBottom: -5 }; 
 const PICKUP_THRESHOLD_Y = -2.0; 
 const TOSS_THRESHOLD_Y = 0.8; 
 const RELOAD_THRESHOLD_Y = -1.0; 
@@ -41,12 +41,15 @@ const LEVELS: Record<number, LevelConfig> = {
   8: { id: 8, name: "LEVEL 8: TIMBANG", stages: [{ action: 'PICK', count: 4, message: "CHALLENGE: PICK ALL!" }], gravity: -20, catchRadius: 2.8, initialHandStones: 1, initialGroundStones: 4 },
 };
 
-// --- MediaPipe Hook ---
-const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean) => {
+// --- MediaPipe Hook (Updated for Exact Viewport Mapping) ---
+const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean, facingMode: string) => {
   const handPos = useRef(new THREE.Vector3(0, -3, 0)); 
   const isPinching = useRef(false);
   const landmarkerRef = useRef<HandLandmarker | null>(null);
   const lastVideoTime = useRef(-1);
+  
+  // Get the EXACT size of the 3D world at current depth
+  const { viewport } = useThree(); 
 
   useEffect(() => {
     const setupModel = async () => {
@@ -83,22 +86,38 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
       if (result.landmarks && result.landmarks.length > 0) {
         const landmarks = result.landmarks[0];
         
-        let x, y;
-        if (isMobile) {
-            // FIX: EXTREME SENSITIVITY
-            // Multipliers increased to 25 and 30 so small thumb movements cover the whole screen
-            x = -((landmarks[8].x - 0.5) * 25); 
-            y = -(landmarks[8].y - 0.55) * 30; 
+        // FIX: Coordinate Mapping
+        // 0.5 is center. 
+        // If facingMode is 'user' (selfie), we mirror (multiply by negative width).
+        // If facingMode is 'environment' (back), we DON'T mirror (multiply by positive width).
+        
+        let xMultiplier = viewport.width; // Use exact screen width
+        let yMultiplier = viewport.height; // Use exact screen height
+        
+        // CORRECTION: Usually MediaPipe x=0 is Left. 
+        // If webcam is mirrored on screen, x movement needs to be flipped to match visual.
+        // If user says "Real Right is Model Left", we need to FLIP the sign.
+        
+        let x;
+        if (facingMode === 'user') {
+             // Selfie Mode: Standard Mirror
+             x = -(landmarks[8].x - 0.5) * xMultiplier;
         } else {
-            x = -((landmarks[8].x - 0.5) * 14); 
-            y = -(landmarks[8].y - 0.5) * 10;
+             // Back Camera: User reported inverted controls. 
+             // We REMOVE the negative sign to fix "Right hand = Left Model".
+             // Now Right Hand (x>0.5) => Positive X (Right Model)
+             x = (landmarks[8].x - 0.5) * xMultiplier; 
         }
 
-        // Clamp to screen edges (Adjusted for new Camera Z=14)
-        x = Math.max(-5.5, Math.min(5.5, x));
-        y = Math.max(-8.0, Math.min(6.5, y));
+        // Adjust Y (Up is 0 in MediaPipe usually, Down is 1)
+        // In 3js, Up is Positive. So we invert Y.
+        let y = -(landmarks[8].y - 0.55) * yMultiplier; 
 
-        // Fast response time
+        // Clamp to screen edges
+        x = Math.max(-viewport.width/2 + 0.5, Math.min(viewport.width/2 - 0.5, x));
+        y = Math.max(-viewport.height/2 + 0.5, Math.min(viewport.height/2 - 0.5, y));
+
+        // Smooth movement
         handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.5); 
 
         const dx = landmarks[4].x - landmarks[8].x;
@@ -123,8 +142,9 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
       const targetRot = isGrabbing ? -0.8 : 0;
       group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.4);
       
-      // Scale adjusted for Z=14
-      const scale = isMobile ? 1.5 : 1.4;
+      // FIX: Size Increase
+      // Made hands significantly bigger (2.0) so they don't look tiny on PC or Phone
+      const scale = isMobile ? 2.0 : 2.2;
       group.current.scale.set(scale, scale, scale);
     }
   });
@@ -188,8 +208,9 @@ const GroundStones = ({ count }: { count: number }) => (
 );
 
 // --- Game Logic ---
-const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMobile, manualTossRef }: any) => {
-  const { handPos, isPinching } = useMediaPipeInput(webcamRef, isMobile);
+const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMobile, manualTossRef, facingMode }: any) => {
+  // Pass facingMode to the hook to fix the Inverted/Mirror issue
+  const { handPos, isPinching } = useMediaPipeInput(webcamRef, isMobile, facingMode);
   const config = LEVELS[level as number];
   
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
@@ -389,8 +410,8 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
       />
       
       <div className="absolute inset-0 z-10">
-        {/* FIX: Cap Pixel Density to 1.5 max AND move Camera back to z=14 */}
-        <Canvas dpr={[1, 1.5]} camera={{ position: [0, 0, 14], fov: isMobile ? 75 : 50 }}>
+        {/* FIX: Moved Camera CLOSER (Z=8) so it looks big on PC/Mobile */}
+        <Canvas dpr={[1, 1.5]} camera={{ position: [0, 0, 8], fov: isMobile ? 75 : 50 }}>
           <GameScene 
              webcamRef={webcamRef} 
              level={level} 
@@ -399,11 +420,11 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
              onFail={() => {}} 
              isMobile={isMobile}
              manualTossRef={manualTossRef}
+             facingMode={facingMode}
           />
         </Canvas>
       </div>
 
-      {/* Main TOSS Button */}
       <button 
         ref={manualTossRef}
         className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-heritage-orange/90 active:bg-heritage-orange text-white w-20 h-20 rounded-full border-4 border-white/20 shadow-xl flex items-center justify-center font-bold tracking-widest animate-pulse"
@@ -422,7 +443,7 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         </div>
       </div>
 
-      {/* Control Buttons (Moved to Bottom to avoid blocking text) */}
+      {/* Control Buttons (Bottom Corners) */}
       <div className="absolute bottom-6 left-6 z-50">
         <button onClick={() => setFitMode(prev => prev === 'cover' ? 'contain' : 'cover')} className="bg-black/60 text-white w-12 h-12 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors flex items-center justify-center">
             {fitMode === 'cover' ? (
