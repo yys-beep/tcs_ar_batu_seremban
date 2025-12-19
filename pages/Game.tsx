@@ -21,7 +21,6 @@ const DESKTOP_CONSTRAINTS = {
 
 const PICKUP_THRESHOLD_Y = -2.0; 
 const RELOAD_THRESHOLD_Y = -1.0; 
-// TOSS Threshold lowered so it's easier to trigger on mobile
 const TOSS_THRESHOLD_Y = 0.5; 
 
 enum GameState { IDLE, HOLDING, TOSSING, FALLING, CAUGHT, DROPPED, LEVEL_COMPLETE, GAME_OVER }
@@ -83,9 +82,7 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
       if (result.landmarks && result.landmarks.length > 0) {
         const landmarks = result.landmarks[0];
         
-        // FIX 1: HIGH SENSITIVITY MULTIPLIER
-        // We multiply the viewport width by 2.5. 
-        // This means moving your hand 40% across the camera moves it 100% across the screen.
+        // High Sensitivity Multiplier
         const sensitivity = 2.5; 
         let xMultiplier = viewport.width * sensitivity; 
         let yMultiplier = viewport.height * sensitivity; 
@@ -101,12 +98,11 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
 
         let y = -(landmarks[8].y - 0.55) * yMultiplier; 
 
-        // Clamp to screen edges so it doesn't fly away
+        // Clamp to screen edges
         x = Math.max(-viewport.width/2 + 0.5, Math.min(viewport.width/2 - 0.5, x));
         y = Math.max(-viewport.height/2 + 0.5, Math.min(viewport.height/2 - 0.5, y));
 
-        // FIX 2: INSTANT REACTION (REDUCED LAG)
-        // Increased lerp from 0.5 to 0.8. This feels "snappy" and reduces perceived lag.
+        // Instant Reaction
         handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.8); 
 
         const dx = landmarks[4].x - landmarks[8].x;
@@ -131,10 +127,10 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
       const targetRot = isGrabbing ? -0.8 : 0;
       group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.4);
       
-      // FIX 3: SIZE ADJUSTMENT
-      // Mobile: 1.2 (Normal size, not huge)
-      // PC: 2.2 (Big enough to see on monitor)
-      const scale = isMobile ? 1.2 : 2.2;
+      // FIX: PC Size Adjustment
+      // Mobile stays 1.2 (as requested)
+      // PC reduced from 2.2 -> 1.4 (Normal size)
+      const scale = isMobile ? 1.2 : 1.4;
       group.current.scale.set(scale, scale, scale);
     }
   });
@@ -398,7 +394,6 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
       />
       
       <div className="absolute inset-0 z-10">
-        {/* FIX: Set DPR to 1 for Maximum Speed on Mobile */}
         <Canvas dpr={[1, 1]} camera={{ position: [0, 0, 8], fov: isMobile ? 75 : 50 }}>
           <GameScene 
              webcamRef={webcamRef} 
