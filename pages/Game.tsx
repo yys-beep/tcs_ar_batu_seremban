@@ -7,12 +7,13 @@ import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 // --- Configuration ---
-// We use a slightly lower resolution request to try and get the "Main" lens 
-// rather than a cropped video lens.
+// PERFORMANCE FIX: 
+// 1280x720 is much faster for the AI to process than 1920x1080.
+// This reduces lag significantly on Android/iOS.
 const MOBILE_CONSTRAINTS = {
   facingMode: "environment",
-  width: { ideal: 1280 }, // Requesting standard HD often prevents extra cropping
-  height: { ideal: 720 }
+  width: { ideal: 1280 },
+  height: { ideal: 720 } 
 };
 
 const DESKTOP_CONSTRAINTS = {
@@ -63,9 +64,11 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
           },
           runningMode: "VIDEO",
           numHands: 1,
-          minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5
+          // PERFORMANCE FIX: Lowered confidence to 0.4
+          // This makes detection faster and "snappier" on mobile
+          minHandDetectionConfidence: 0.4,
+          minHandPresenceConfidence: 0.4,
+          minTrackingConfidence: 0.4
         });
       } catch (err) {
         console.error("Failed to load MediaPipe:", err);
@@ -87,18 +90,21 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
         
         let x, y;
         if (isMobile) {
-            // Tuned for Z=10
-            x = -((landmarks[8].x - 0.5) * 14); 
-            y = -(landmarks[8].y - 0.55) * 18; 
+            // SENSITIVITY FIX: Increased multipliers significantly (20 and 24)
+            // Small hand movements now translate to BIG screen movements
+            x = -((landmarks[8].x - 0.5) * 20); 
+            y = -(landmarks[8].y - 0.55) * 24; 
         } else {
             x = -((landmarks[8].x - 0.5) * 14); 
             y = -(landmarks[8].y - 0.5) * 10;
         }
 
-        x = Math.max(-7, Math.min(7, x));
-        y = Math.max(-9, Math.min(7, y));
+        // Clamp the values so the hand doesn't disappear off-screen
+        x = Math.max(-8, Math.min(8, x));
+        y = Math.max(-10, Math.min(8, y));
 
-        handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.4); 
+        // Reduced lerp from 0.4 to 0.3 to smooth out the "jitter" from low FPS
+        handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.3); 
 
         const dx = landmarks[4].x - landmarks[8].x;
         const dy = landmarks[4].y - landmarks[8].y;
@@ -358,8 +364,6 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
   const [showOverlay, setShowOverlay] = useState(false);
   const [overlayMsg, setOverlayMsg] = useState("");
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
-  
-  // New state to toggle "Zoom" vs "Fit"
   const [fitMode, setFitMode] = useState<'cover' | 'contain'>('cover');
 
   const currentConfig = LEVELS[level];
@@ -385,7 +389,6 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         key={facingMode} 
         ref={webcamRef} audio={false} mirrored={facingMode === 'user'}
         playsInline={true} muted={true}
-        // FIX: Dynamic object-fit based on user choice
         className={`absolute inset-0 w-full h-full opacity-30 pointer-events-none ${fitMode === 'cover' ? 'object-cover' : 'object-contain bg-black'}`}
         videoConstraints={videoConstraints}
       />
@@ -423,7 +426,6 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
       </div>
 
       <div className="absolute top-6 right-6 z-50 flex gap-2">
-        {/* FIX: New Button to toggle ZOOM */}
         <button onClick={() => setFitMode(prev => prev === 'cover' ? 'contain' : 'cover')} className="bg-black/60 text-white p-3 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors">
             {fitMode === 'cover' ? (
                 <span className="text-xs font-bold">UNZOOM</span>
