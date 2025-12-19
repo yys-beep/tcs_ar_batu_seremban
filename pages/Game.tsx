@@ -7,9 +7,6 @@ import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 // --- Configuration ---
-// PERFORMANCE FIX: 
-// 1280x720 is much faster for the AI to process than 1920x1080.
-// This reduces lag significantly on Android/iOS.
 const MOBILE_CONSTRAINTS = {
   facingMode: "environment",
   width: { ideal: 1280 },
@@ -64,8 +61,6 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
           },
           runningMode: "VIDEO",
           numHands: 1,
-          // PERFORMANCE FIX: Lowered confidence to 0.4
-          // This makes detection faster and "snappier" on mobile
           minHandDetectionConfidence: 0.4,
           minHandPresenceConfidence: 0.4,
           minTrackingConfidence: 0.4
@@ -90,21 +85,24 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
         
         let x, y;
         if (isMobile) {
-            // SENSITIVITY FIX: Increased multipliers significantly (20 and 24)
-            // Small hand movements now translate to BIG screen movements
-            x = -((landmarks[8].x - 0.5) * 20); 
-            y = -(landmarks[8].y - 0.55) * 24; 
+            // FIX 1: Balanced Sensitivity (15 & 19)
+            // This is responsive but less "wild" than 20/24
+            x = -((landmarks[8].x - 0.5) * 15); 
+            y = -(landmarks[8].y - 0.55) * 19; 
         } else {
             x = -((landmarks[8].x - 0.5) * 14); 
             y = -(landmarks[8].y - 0.5) * 10;
         }
 
-        // Clamp the values so the hand doesn't disappear off-screen
-        x = Math.max(-8, Math.min(8, x));
-        y = Math.max(-10, Math.min(8, y));
+        // FIX 2: Tighter "Invisible Walls" (Clamping)
+        // This stops the hand from leaving the phone screen edges.
+        // Range reduced from [-8, 8] to [-4.2, 4.2]
+        x = Math.max(-4.2, Math.min(4.2, x));
+        y = Math.max(-7.0, Math.min(6.0, y));
 
-        // Reduced lerp from 0.4 to 0.3 to smooth out the "jitter" from low FPS
-        handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.3); 
+        // FIX 3: Smoother Movement (Lerp 0.2)
+        // Lower lerp adds weight and reduces jitter/shaking
+        handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.2); 
 
         const dx = landmarks[4].x - landmarks[8].x;
         const dy = landmarks[4].y - landmarks[8].y;
