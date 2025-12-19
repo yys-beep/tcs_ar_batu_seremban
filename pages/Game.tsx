@@ -8,11 +8,11 @@ import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 // --- Configuration ---
 const MOBILE_VIDEO_WIDTH = 360;
-const MOBILE_VIDEO_HEIGHT = 480;
+const MOBILE_VIDEO_HEIGHT = 640;
 const BOUNDS = { x: 4.5, yTop: 4.0, yBottom: -5 }; 
 const PICKUP_THRESHOLD_Y = -2.0; 
 const TOSS_THRESHOLD_Y = 0.8; 
-const RELOAD_THRESHOLD_Y = -1.0; // Must dip hand below this to toss again
+const RELOAD_THRESHOLD_Y = -1.0; 
 
 // --- Types ---
 enum GameState { IDLE, HOLDING, TOSSING, FALLING, CAUGHT, DROPPED, LEVEL_COMPLETE, GAME_OVER }
@@ -73,18 +73,20 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
       if (result.landmarks && result.landmarks.length > 0) {
         const landmarks = result.landmarks[0];
         
+        // --- MOBILE OPTIMIZED MAPPING ---
         let x, y;
         if (isMobile) {
-            x = -((landmarks[8].x - 0.5) * 8); 
-            y = -(landmarks[8].y - 0.6) * 12; 
+            // Wider X range for mobile so you can reach edges
+            // Higher Y offset so hand isn't stuck at bottom
+            x = -((landmarks[8].x - 0.5) * 10); 
+            y = -(landmarks[8].y - 0.55) * 14; 
         } else {
             x = -((landmarks[8].x - 0.5) * 14); 
             y = -(landmarks[8].y - 0.5) * 10;
         }
 
-        // Clamp values
-        x = Math.max(-5, Math.min(5, x));
-        y = Math.max(-6, Math.min(5, y));
+        x = Math.max(-6, Math.min(6, x));
+        y = Math.max(-7, Math.min(6, y));
 
         handPos.current.lerp(new THREE.Vector3(x, y, 0), 0.4); 
 
@@ -99,10 +101,9 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
 };
 
 // --- 3D Components ---
-const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss }: { position: THREE.Vector3, stonesInHand: number, isGrabbing: boolean, canToss: boolean }) => {
+const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }: { position: THREE.Vector3, stonesInHand: number, isGrabbing: boolean, canToss: boolean, isMobile: boolean }) => {
   const group = useRef<THREE.Group>(null);
   
-  // Visual Feedback: Green=Pinch, White=Ready to Toss, Tan=Idle
   const skinColor = isGrabbing ? "#86efac" : (canToss ? "#ffffff" : "#eecfad");
 
   useFrame(() => {
@@ -111,6 +112,10 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss }: { positi
       group.current.rotation.z = -position.x * 0.1;
       const targetRot = isGrabbing ? -0.8 : 0;
       group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.2);
+      
+      // SHRINK HAND ON MOBILE so it doesn't block the view
+      const scale = isMobile ? 0.75 : 1.0;
+      group.current.scale.set(scale, scale, scale);
     }
   });
 
@@ -187,8 +192,6 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
   const [stonesInHand, setStonesInHand] = useState(0);
   const [actionPerformed, setActionPerformed] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
-  
-  // NEW: Reload Mechanic
   const [canToss, setCanToss] = useState(true);
 
   useEffect(() => {
@@ -219,7 +222,7 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
         setStoneVel(new THREE.Vector3(0, 10, 0)); 
         setActionPerformed(false);
         setMessage(""); 
-        setCanToss(false); // MUST RELOAD
+        setCanToss(false);
     }
   };
 
@@ -230,17 +233,9 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
   useFrame((_, delta) => {
     if (gameState === GameState.LEVEL_COMPLETE || gameState === GameState.GAME_OVER) return;
 
-    // 1. RELOAD CHECK (Dip hand low to enable next toss)
-    if (!canToss && handPos.current.y < RELOAD_THRESHOLD_Y && gameState === GameState.IDLE) {
-        setCanToss(true);
-    }
+    if (!canToss && handPos.current.y < RELOAD_THRESHOLD_Y && gameState === GameState.IDLE) setCanToss(true);
+    if (canToss && handPos.current.y > TOSS_THRESHOLD_Y && stonesInHand > 0 && gameState === GameState.IDLE) triggerToss();
 
-    // 2. AUTO TOSS (Only if canToss is TRUE)
-    if (canToss && handPos.current.y > TOSS_THRESHOLD_Y && stonesInHand > 0 && gameState === GameState.IDLE) {
-        triggerToss();
-    }
-
-    // 3. Interaction
     if ((gameState === GameState.TOSSING || gameState === GameState.FALLING) && handPos.current.y < PICKUP_THRESHOLD_Y && !actionPerformed) {
       if (currentStage.action === 'PICK' && stonesOnGround >= currentStage.count) {
         setStonesOnGround(s => s - currentStage.count);
@@ -255,7 +250,6 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
       }
     }
 
-    // Physics
     switch (gameState) {
       case GameState.IDLE: case GameState.HOLDING: case GameState.CAUGHT:
         const holdPos = handPos.current.clone().add(new THREE.Vector3(0, 0.6, 0.2));
@@ -292,7 +286,6 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
                 setGameState(GameState.CAUGHT);
                 setCurrentStageIndex(nextStageIndex);
                 setMessage(config.stages[nextStageIndex].message);
-                // FIXED: Reset action flag for next stage
                 setActionPerformed(false); 
                 onProgress({ stage: nextStageIndex, totalStages: config.stages.length });
               }
@@ -324,7 +317,7 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
       <pointLight position={[10, 10, 10]} color="#fbbf24" intensity={1} />
       <directionalLight position={[0, 5, 5]} intensity={0.5} />
 
-      <MannequinHand position={handPos.current} stonesInHand={stonesInHand-1} isGrabbing={isPinching.current} canToss={canToss} />
+      <MannequinHand position={handPos.current} stonesInHand={stonesInHand-1} isGrabbing={isPinching.current} canToss={canToss} isMobile={isMobile} />
       
       {gameState !== GameState.DROPPED && <BatuSandbag position={stonePos} rotation={stoneRot} />}
       <GroundStones count={stonesOnGround} />
@@ -334,14 +327,13 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
         <meshBasicMaterial color={actionPerformed ? "#22c55e" : "#ea580c"} transparent opacity={0.15} />
       </mesh>
       
-      {/* Dynamic Text Instructions */}
-      <Text position={[0, -2.5, 0]} fontSize={0.3} color="white" fillOpacity={canToss ? 0.3 : 1}>
-         {canToss ? "DIP HAND HERE" : "⬇️ DIP HAND TO RELOAD"}
+      <Text position={[0, -2.5, 0]} fontSize={isMobile ? 0.4 : 0.3} color="white" fillOpacity={canToss ? 0.3 : 1}>
+         {canToss ? "DIP HAND HERE" : "⬇️ RELOAD"}
       </Text>
-      <Text position={[0, 2.0, 0]} fontSize={0.3} color="white" fillOpacity={canToss ? 1 : 0.3}>
-         {canToss ? "⬆️ RAISE HAND TO TOSS" : "WAIT..."}
+      <Text position={[0, 2.0, 0]} fontSize={isMobile ? 0.4 : 0.3} color="white" fillOpacity={canToss ? 1 : 0.3}>
+         {canToss ? "⬆️ TOSS" : "WAIT..."}
       </Text>
-      <Text position={[0, 3.5, 0]} fontSize={0.5} color="white" anchorX="center" anchorY="middle">{message}</Text>
+      <Text position={[0, 3.5, 0]} fontSize={isMobile ? 0.6 : 0.5} color="white" anchorX="center" anchorY="middle">{message}</Text>
     </>
   );
 };
@@ -385,7 +377,8 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
       />
       
       <div className="absolute inset-0 z-10">
-        <Canvas camera={{ position: [0, 0, 7], fov: 50 }}>
+        {/* Adjusted FOV for Mobile to look "Zoomed Out" */}
+        <Canvas camera={{ position: [0, 0, 7], fov: isMobile ? 75 : 50 }}>
           <GameScene 
              webcamRef={webcamRef} 
              level={level} 
@@ -400,30 +393,25 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
 
       <button 
         ref={manualTossRef}
-        className="absolute bottom-20 right-6 z-50 bg-heritage-orange/80 active:bg-heritage-orange text-white w-24 h-24 rounded-full border-4 border-white/20 shadow-xl flex items-center justify-center font-bold tracking-widest animate-pulse"
+        className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-heritage-orange/90 active:bg-heritage-orange text-white w-20 h-20 rounded-full border-4 border-white/20 shadow-xl flex items-center justify-center font-bold tracking-widest animate-pulse"
       >
         TOSS
       </button>
 
-      <div className="absolute top-24 left-6 z-20 w-64 pointer-events-none">
-        <div className="bg-heritage-black/80 border border-heritage-orange/50 p-4 rounded-lg backdrop-blur-md shadow-lg">
+      {/* Responsive HUD */}
+      <div className={`absolute ${isMobile ? 'top-4 left-1/2 transform -translate-x-1/2 w-80' : 'top-24 left-6 w-64'} z-20 pointer-events-none`}>
+        <div className="bg-heritage-black/80 border border-heritage-orange/50 p-3 rounded-lg backdrop-blur-md shadow-lg text-center md:text-left">
           <h3 className="text-heritage-orange font-serif text-lg font-bold">{currentConfig.name}</h3>
-          <p className="text-heritage-gray text-[10px] uppercase tracking-widest mb-2 h-4">{currentConfig.stages[progress.stage]?.message}</p>
-          <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden mb-2">
+          <p className="text-heritage-gray text-[10px] uppercase tracking-widest mb-1 h-4">{currentConfig.stages[progress.stage]?.message}</p>
+          <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden mb-1">
              <div className="bg-heritage-orange h-full transition-all duration-300" style={{ width: `${progressPercent}%` }} />
           </div>
         </div>
       </div>
 
-      <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="absolute top-24 right-6 z-50 bg-black/60 text-white p-3 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors">
+      <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="absolute top-6 right-6 z-50 bg-black/60 text-white p-3 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors">
         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
       </button>
-
-      <div className="absolute bottom-10 w-full text-center pointer-events-none z-20">
-        <p className="text-heritage-cream/90 text-sm font-bold bg-black/60 inline-block px-6 py-2 rounded-full border border-white/10">
-           DIP HAND TO LOAD • RAISE TO TOSS
-        </p>
-      </div>
 
       {showOverlay && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-heritage-black/90 backdrop-blur-sm">
