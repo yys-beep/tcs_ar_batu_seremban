@@ -1,13 +1,13 @@
 /// <reference types="@react-three/fiber" />
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useMemo, Suspense } from 'react';
 import Webcam from 'react-webcam';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Cylinder, Sphere, Tetrahedron, Float, Text } from '@react-three/drei';
+import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber';
+import { Cylinder, Sphere, Float, Text, Loader } from '@react-three/drei';
 import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
+import { OBJLoader } from 'three-stdlib';
 
 // --- Configuration ---
-// Reverted to Landscape constraints which are more stable on Android/iOS
 const MOBILE_CONSTRAINTS = {
   facingMode: "environment",
   width: { ideal: 1280 },
@@ -25,8 +25,7 @@ const RELOAD_THRESHOLD_Y = -1.0;
 const TOSS_THRESHOLD_Y = 0.5; 
 
 enum GameState { IDLE, HOLDING, TOSSING, FALLING, CAUGHT, DROPPED, LEVEL_COMPLETE, GAME_OVER }
-type StageAction = 'PICK' | 'PLACE' | 'EXCHANGE';
-interface StageConfig { action: StageAction; count: number; message: string; }
+interface StageConfig { action: 'PICK' | 'PLACE' | 'EXCHANGE'; count: number; message: string; }
 interface LevelConfig { id: number; name: string; stages: StageConfig[]; gravity: number; catchRadius: number; initialHandStones: number; initialGroundStones: number; }
 
 const LEVELS: Record<number, LevelConfig> = {
@@ -82,8 +81,6 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
 
       if (result.landmarks && result.landmarks.length > 0) {
         const landmarks = result.landmarks[0];
-        
-        // High Sensitivity
         const sensitivity = 2.5; 
         let xMultiplier = viewport.width * sensitivity; 
         let yMultiplier = viewport.height * sensitivity; 
@@ -112,7 +109,30 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
   return { handPos, isPinching };
 };
 
-// --- 3D Components ---
+// --- NEW COMPONENT: Reusable 3D Stone Model ---
+const BatuModel = ({ color, scale = 1, opacity = 1 }: any) => {
+  const obj = useLoader(OBJLoader, '/models/white_mesh.obj') as THREE.Group;
+  
+  const clone = useMemo(() => {
+    const c = obj.clone();
+    c.traverse((child: any) => {
+      if (child.isMesh) {
+        child.material = new THREE.MeshStandardMaterial({
+          color: color,
+          roughness: 0.6,
+          metalness: 0.1,
+          transparent: opacity < 1,
+          opacity: opacity,
+        });
+      }
+    });
+    return c;
+  }, [obj, color, opacity]);
+
+  return <primitive object={clone} scale={[scale, scale, scale]} />;
+};
+
+// --- Hand Component (Code-Based) ---
 const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }: { position: THREE.Vector3, stonesInHand: number, isGrabbing: boolean, canToss: boolean, isMobile: boolean }) => {
   const group = useRef<THREE.Group>(null);
   const skinColor = isGrabbing ? "#86efac" : (canToss ? "#ffffff" : "#eecfad");
@@ -123,67 +143,75 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
       group.current.rotation.z = -position.x * 0.1;
       const targetRot = isGrabbing ? -0.8 : 0;
       group.current.rotation.x = THREE.MathUtils.lerp(group.current.rotation.x, targetRot, 0.4);
-      
-      // Sizes: Mobile 1.2, PC 1.4
       const scale = isMobile ? 1.2 : 1.4;
       group.current.scale.set(scale, scale, scale);
     }
   });
 
-  const Finger = ({ x, length, rotZ = 0 }: { x: number, length: number, rotZ?: number }) => (
+  const Finger = ({ x, length, rotZ, grabbing }: any) => (
     <group position={[x, 0.6, 0]} rotation={[0, 0, rotZ]}>
-      <Sphere args={[0.13, 8, 8]} position={[0, 0, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
-      <Cylinder args={[0.12, 0.13, length/2, 8]} position={[0, length/4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
-      <Sphere args={[0.11, 8, 8]} position={[0, length/2, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
-      <group position={[0, length/2, 0]} rotation={[isGrabbing ? 1.5 : 0.1, 0, 0]}>
-         <Cylinder args={[0.1, 0.11, length/2, 8]} position={[0, length/4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
-         <Sphere args={[0.1, 8, 8]} position={[0, length/2, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
-      </group>
+        <Sphere args={[0.13, 8, 8]} position={[0, 0, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
+        <Cylinder args={[0.12, 0.13, length/2, 8]} position={[0, length/4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
+        <Sphere args={[0.11, 8, 8]} position={[0, length/2, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
+        <group position={[0, length/2, 0]} rotation={[grabbing ? 1.5 : 0.1, 0, 0]}>
+            <Cylinder args={[0.1, 0.11, length/2, 8]} position={[0, length/4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
+            <Sphere args={[0.1, 8, 8]} position={[0, length/2, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
+        </group>
     </group>
   );
 
   return (
     <group ref={group}>
+      {/* Palm */}
       <group scale={[1, 1, 0.6]}>
-         <Sphere args={[0.6, 16, 16]} position={[0, 0, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
-         <Cylinder args={[0.55, 0.5, 0.8, 16]} position={[0, -0.4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
+          <Sphere args={[0.6, 16, 16]} position={[0, 0, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
+          <Cylinder args={[0.55, 0.5, 0.8, 16]} position={[0, -0.4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
       </group>
-      <Finger x={-0.4} length={0.7} rotZ={0.2} />
-      <Finger x={-0.15} length={0.9} rotZ={0.05} />
-      <Finger x={0.15} length={1.0} rotZ={-0.05} />
-      <Finger x={0.4} length={0.9} rotZ={-0.2} />
+      
+      <Finger x={-0.4} length={0.7} rotZ={0.2} grabbing={isGrabbing} />
+      <Finger x={-0.15} length={0.9} rotZ={0.05} grabbing={isGrabbing} />
+      <Finger x={0.15} length={1.0} rotZ={-0.05} grabbing={isGrabbing} />
+      <Finger x={0.4} length={0.9} rotZ={-0.2} grabbing={isGrabbing} />
+      
       <group position={[0.5, -0.2, 0.2]} rotation={[0, -0.5, -0.8]}>
         <Cylinder args={[0.13, 0.15, 0.5, 8]} position={[0, 0.25, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
         <Sphere args={[0.13, 8, 8]} position={[0, 0.5, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
         <group position={[0, 0.5, 0]} rotation={[isGrabbing ? 1.0 : 0, 0, 0]}>
-           <Cylinder args={[0.11, 0.13, 0.4, 8]} position={[0, 0.2, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
-           <Sphere args={[0.11, 8, 8]} position={[0, 0.4, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
+            <Cylinder args={[0.11, 0.13, 0.4, 8]} position={[0, 0.2, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
+            <Sphere args={[0.11, 8, 8]} position={[0, 0.4, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
         </group>
       </group>
+
+      {/* Stones in Palm - Now using your 3D Model! */}
       {Array.from({ length: stonesInHand }).map((_, i) => (
-         <Tetrahedron key={i} args={[0.15, 0]} position={[-0.2 + i * 0.15, 0.4, 0.3]}>
-            <meshStandardMaterial color="#fbbf24" roughness={0.2} />
-         </Tetrahedron>
+         <group key={i} position={[-0.2 + i * 0.15, 0.4, 0.3]} rotation={[0, 0, Math.random()]}>
+            <BatuModel color="#fbbf24" scale={0.2} />
+         </group>
       ))}
     </group>
   );
 };
 
+// --- Tossed Stone (Using 3D Model) ---
 const BatuSandbag = ({ position, rotation }: { position: THREE.Vector3, rotation: THREE.Euler }) => (
   <group position={position} rotation={rotation}>
     <Float speed={10} rotationIntensity={2} floatIntensity={0}>
-      <Tetrahedron args={[0.5, 0]}><meshStandardMaterial color="#ea580c" roughness={0.8} metalness={0.1} /></Tetrahedron>
-      <Tetrahedron args={[0.6, 0]}><meshStandardMaterial color="#fbbf24" wireframe transparent opacity={0.5} /></Tetrahedron>
+      <BatuModel color="#ea580c" scale={0.5} />
+      {/* Ghost Trail */}
+      <group scale={[1.1, 1.1, 1.1]}>
+         <BatuModel color="#fbbf24" scale={0.55} opacity={0.3} />
+      </group>
     </Float>
   </group>
 );
 
+// --- Ground Stones (Using 3D Model) ---
 const GroundStones = ({ count }: { count: number }) => (
     <group position={[0, -5.5, -1]}>
       {Array.from({ length: count }).map((_, i) => (
-        <Tetrahedron key={i} args={[0.4, 0]} position={[-1.5 + i * 1, 0, 0]} rotation={[i*2, i*3, i*0.5]}>
-           <meshStandardMaterial color="#52525b" roughness={0.6} />
-        </Tetrahedron>
+        <group key={i} position={[-1.5 + i * 1, 0, 0]} rotation={[i*2, i*3, i*0.5]}>
+           <BatuModel color="#52525b" scale={0.4} />
+        </group>
       ))}
     </group>
 );
@@ -339,10 +367,10 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
       </mesh>
       
       <Text position={[0, -2.5, 0]} fontSize={isMobile ? 0.35 : 0.3} color="white" fillOpacity={canToss ? 0.3 : 1}>
-         {canToss ? "DIP HAND HERE" : "⬇️ RELOAD"}
+          {canToss ? "DIP HAND HERE" : "⬇️ RELOAD"}
       </Text>
       <Text position={[0, 2.0, 0]} fontSize={isMobile ? 0.35 : 0.3} color="white" fillOpacity={canToss ? 1 : 0.3}>
-         {canToss ? "⬆️ TOSS" : "WAIT..."}
+          {canToss ? "⬆️ TOSS" : "WAIT..."}
       </Text>
       <Text position={[0, 3.5, 0]} fontSize={isMobile ? 0.5 : 0.5} color="white" anchorX="center" anchorY="middle">{message}</Text>
     </>
@@ -359,8 +387,6 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
   const [showOverlay, setShowOverlay] = useState(false);
   const [overlayMsg, setOverlayMsg] = useState("");
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
-  
-  // RESTORED: Manual Fit Toggle
   const [fitMode, setFitMode] = useState<'cover' | 'contain'>('cover');
 
   const currentConfig = LEVELS[level];
@@ -376,9 +402,7 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
     }, 2500);
   };
 
-  const videoConstraints = isMobile 
-    ? MOBILE_CONSTRAINTS
-    : DESKTOP_CONSTRAINTS;
+  const videoConstraints = isMobile ? MOBILE_CONSTRAINTS : DESKTOP_CONSTRAINTS;
 
   return (
     <div className="h-[100dvh] w-full bg-heritage-black relative overflow-hidden">
@@ -386,24 +410,26 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         key={facingMode} 
         ref={webcamRef} audio={false} mirrored={facingMode === 'user'}
         playsInline={true} muted={true}
-        // DYNAMIC CLASS for Unzoom Support
         className={`absolute inset-0 w-full h-full opacity-30 pointer-events-none ${fitMode === 'cover' ? 'object-cover' : 'object-contain bg-black'}`}
         videoConstraints={videoConstraints}
       />
       
       <div className="absolute inset-0 z-10">
         <Canvas dpr={[1, 1]} camera={{ position: [0, 0, 8], fov: isMobile ? 75 : 50 }}>
-          <GameScene 
-             webcamRef={webcamRef} 
-             level={level} 
-             onProgress={setProgress} 
-             onLevelComplete={handleLevelComplete} 
-             onFail={() => {}} 
-             isMobile={isMobile}
-             manualTossRef={manualTossRef}
-             facingMode={facingMode}
-          />
+          <Suspense fallback={null}>
+             <GameScene 
+                webcamRef={webcamRef} 
+                level={level} 
+                onProgress={setProgress} 
+                onLevelComplete={handleLevelComplete} 
+                onFail={() => {}} 
+                isMobile={isMobile}
+                manualTossRef={manualTossRef}
+                facingMode={facingMode}
+             />
+          </Suspense>
         </Canvas>
+        <Loader />
       </div>
 
       <button 
@@ -424,14 +450,12 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
         </div>
       </div>
 
-      {/* RESTORED: Unzoom Button (Bottom Left) */}
       <div className="absolute bottom-6 left-6 z-50">
         <button onClick={() => setFitMode(prev => prev === 'cover' ? 'contain' : 'cover')} className="bg-black/60 text-white w-12 h-12 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors flex items-center justify-center">
             {fitMode === 'cover' ? <span className="text-[10px] font-bold">UNZOOM</span> : <span className="text-[10px] font-bold">FILL</span>}
         </button>
       </div>
       
-      {/* Camera Switch Button (Bottom Right) */}
       <div className="absolute bottom-6 right-6 z-50">
         <button onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')} className="bg-black/60 text-white w-12 h-12 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors flex items-center justify-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>

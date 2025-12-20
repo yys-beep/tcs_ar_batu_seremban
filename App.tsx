@@ -17,7 +17,6 @@ const App: React.FC = () => {
   
   const handleGameOver = () => {
     setIsGameOver(true);
-    // Return home after 5s
     setTimeout(() => setActiveTab('home'), 5000); 
   }
 
@@ -37,11 +36,12 @@ const App: React.FC = () => {
   };
   
   const isGameActive = activeTab === 'game';
+  const isChatActive = activeTab === 'chat';
 
   return (
-    // FIX: Changed min-h-screen to h-[100dvh] and added overflow-hidden
-    // This prevents the mobile URL bar from pushing content off-screen
-    <div className="bg-heritage-black h-[100dvh] w-full overflow-hidden text-white font-sans selection:bg-heritage-orange selection:text-white flex flex-col">
+    // FIX 1: Changed 'overflow-hidden' to 'overflow-y-auto overflow-x-hidden'
+    // This allows vertical scrolling when content (like the stones) gets pushed down
+    <div className="bg-heritage-black h-[100dvh] w-full overflow-y-auto overflow-x-hidden text-white font-sans selection:bg-heritage-orange selection:text-white flex flex-col">
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} isGameActive={isGameActive} />
       
       {isGameActive && !isGameOver && (
@@ -53,12 +53,12 @@ const App: React.FC = () => {
           </button>
       )}
 
-      {/* FIX: Main content takes remaining height properly */}
-      <main className="flex-grow relative w-full h-full">
+      {/* FIX 2: Removed 'h-full' to allow the main content to grow as tall as it needs */}
+      <main className="flex-grow relative w-full">
         {renderContent()}
       </main>
 
-      {!isGameActive && <Footer />}
+      {!isGameActive && !isChatActive && <Footer />}
     </div>
   );
 };

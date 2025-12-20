@@ -11,8 +11,11 @@ const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, isGameActive }
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navItems = ['home', 'tutorial', 'chat'];
 
+  // REPLACE THIS WITH YOUR ACTUAL GOOGLE FORM LINK
+  const FEEDBACK_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSf4CRHpBOMzjF5krHmtn4s18ePZeyjzz44YfYa-wdWFpBCtGw/viewform?usp=dialog"; 
+
   if (isGameActive) {
-    return null; // Don't render Navbar during the game
+    return null; 
   }
 
   const handleNavClick = (tab: string) => {
@@ -20,11 +23,17 @@ const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, isGameActive }
     setIsMenuOpen(false);
   };
 
+  // New function to handle external feedback link
+  const handleFeedbackClick = () => {
+    window.open(FEEDBACK_FORM_URL, '_blank'); // Opens in new tab
+    setIsMenuOpen(false);
+  };
+
   return (
     <>
       <nav className="fixed top-0 left-0 w-full z-50 bg-heritage-black/90 backdrop-blur-xl border-b border-heritage-orange/10 shadow-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-24"> {/* Increased height for grander feel */}
+          <div className="flex items-center justify-between h-24"> 
             
             {/* Brand Logo & Title */}
             <div className="flex-shrink-0 flex items-center cursor-pointer group" onClick={() => handleNavClick('home')}>
@@ -44,6 +53,7 @@ const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, isGameActive }
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center">
               <div className="ml-10 flex items-baseline space-x-8">
+                {/* Standard Internal Tabs */}
                 {navItems.map((tab) => (
                   <button
                     key={tab}
@@ -57,6 +67,17 @@ const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, isGameActive }
                     ></span>
                   </button>
                 ))}
+
+                {/* NEW: Feedback Link (External) */}
+                <button
+                    onClick={handleFeedbackClick}
+                    className="relative px-2 py-2 text-xs font-bold transition-all duration-500 uppercase tracking-[0.2em] group overflow-hidden text-heritage-gold hover:text-white"
+                >
+                    <span className="relative z-10">Feedback</span>
+                    <span className="absolute bottom-0 left-0 h-[1px] bg-heritage-gold w-0 group-hover:w-full transition-all duration-500 ease-out"></span>
+                </button>
+
+                {/* Play Game Button */}
                 <button 
                   onClick={() => handleNavClick('game')}
                   className="ml-8 group relative px-6 py-3 overflow-hidden rounded-none border border-heritage-orange/30 bg-transparent transition-all duration-300 hover:border-heritage-orange"
@@ -114,6 +135,14 @@ const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, isGameActive }
                 {tab}
               </button>
             ))}
+
+            {/* NEW: Mobile Feedback Link */}
+            <button
+                onClick={handleFeedbackClick}
+                className="text-left py-2 text-xl font-serif font-medium tracking-wider text-heritage-gold hover:text-white hover:translate-x-2 transition-all duration-300"
+            >
+                Feedback
+            </button>
           </div>
 
           <button 
