@@ -1,40 +1,48 @@
 import { GoogleGenAI } from "@google/genai";
 
-const SYSTEM_INSTRUCTION_KNOWLEDGE_GRAPH = `You are a world-class cultural historian and museum guide for Badan Warisan Malaysia, specializing in the traditional game "Batu Seremban".
-Your task is to provide accurate, engaging, and concise information based on the user's query and grounded in real-time web search results.
-- Provide a direct answer to the user's question.
+// 1. English Persona
+const SYSTEM_INSTRUCTION_EN = `You are a world-class cultural historian and museum guide for Badan Warisan Malaysia, specializing in the traditional game "Batu Seremban".
+Your task is to provide accurate, engaging, and concise information based on the user's query.
+- Answer in ENGLISH.
 - Your tone should be educational, respectful, and engaging.
-- After your main answer, suggest three distinct and interesting follow-up questions that the user might have. Format them clearly under a heading 'Follow-up Questions:'.
-- Do not mention that you are using Google Search. Simply present the information.
-- Keep the main answer under 120 words.
-`;
+- After your main answer, suggest three distinct follow-up questions. Format strictly as 'Follow-up Questions:'.
+- Keep the main answer under 120 words.`;
 
-export const getGroundedKnowledge = async (message: string): Promise<{ text: string; sources: { title: string; uri: string }[]; followUpQuestions: string[] }> => {
+// 2. Malay Persona
+const SYSTEM_INSTRUCTION_BM = `Anda adalah ahli sejarah budaya bertaraf dunia dan pemandu muzium untuk Badan Warisan Malaysia, pakar dalam permainan tradisional "Batu Seremban".
+Tugas anda adalah memberikan maklumat yang tepat, menarik, dan ringkas berdasarkan pertanyaan pengguna.
+- Jawab dalam BAHASA MELAYU.
+- Nada anda haruslah mendidik, hormat, dan menarik.
+- Selepas jawapan utama, cadangkan tiga soalan susulan yang menarik. Formatkan dengan tajuk 'Follow-up Questions:'.
+- Pastikan jawapan utama di bawah 120 patah perkataan.`;
+
+export const getGroundedKnowledge = async (message: string, lang: 'en' | 'bm'): Promise<{ text: string; sources: { title: string; uri: string }[]; followUpQuestions: string[] }> => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    // 3. Select Instruction based on Language
+    const instruction = lang === 'bm' ? SYSTEM_INSTRUCTION_BM : SYSTEM_INSTRUCTION_EN;
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: message,
       config: {
         tools: [{ googleSearch: {} }],
-        systemInstruction: SYSTEM_INSTRUCTION_KNOWLEDGE_GRAPH,
+        systemInstruction: instruction,
       }
     });
 
-    const fullText = response.text ?? "I couldn't retrieve that information right now.";
+    const fullText = response.text ?? (lang === 'bm' ? "Maaf, saya tidak dapat mencari maklumat itu sekarang." : "I couldn't retrieve that information right now.");
     
-    // Extract sources from grounding metadata
     const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
       ?.map(chunk => ({
         title: chunk.web?.title || new URL(chunk.web?.uri || '').hostname,
         uri: chunk.web?.uri || '#',
       }))
-      // Filter out potential duplicates
       .filter((source, index, self) => 
         index === self.findIndex((s) => s.uri === source.uri)
       ) || [];
       
-    // Extract follow-up questions from the text
     const followUpRegex = /Follow-up Questions:([\s\S]*)/i;
     const followUpMatch = fullText.match(followUpRegex);
     const mainText = fullText.replace(followUpRegex, '').trim();
@@ -49,9 +57,13 @@ export const getGroundedKnowledge = async (message: string): Promise<{ text: str
   } catch (error) {
     console.error("Gemini API Error:", error);
     return {
-      text: "An error occurred while consulting the archives. The digital records might be temporarily unavailable.",
+      text: lang === 'bm' 
+        ? "Ralat berlaku semasa menyemak arkib digital." 
+        : "An error occurred while consulting the archives.",
       sources: [],
-      followUpQuestions: ["Try asking about the game's origin.", "What are the rules for Level 1?"]
+      followUpQuestions: lang === 'bm' 
+        ? ["Bagaimana cara main Batu Seremban?", "Asal usul permainan ini?"] 
+        : ["How to play Batu Seremban?", "Origins of the game?"]
     };
   }
 };

@@ -6,6 +6,7 @@ import { Cylinder, Sphere, Float, Text, Loader } from '@react-three/drei';
 import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { OBJLoader } from 'three-stdlib';
+import { useLanguage } from '../context/LanguageContext';
 
 // --- Configuration ---
 const MOBILE_CONSTRAINTS = {
@@ -25,21 +26,21 @@ const RELOAD_THRESHOLD_Y = -1.0;
 const TOSS_THRESHOLD_Y = 0.5; 
 
 enum GameState { IDLE, HOLDING, TOSSING, FALLING, CAUGHT, DROPPED, LEVEL_COMPLETE, GAME_OVER }
-interface StageConfig { action: 'PICK' | 'PLACE' | 'EXCHANGE'; count: number; message: string; }
+interface StageConfig { action: 'PICK' | 'PLACE' | 'EXCHANGE'; count: number; messageKey: string; }
 interface LevelConfig { id: number; name: string; stages: StageConfig[]; gravity: number; catchRadius: number; initialHandStones: number; initialGroundStones: number; }
 
+// Updated LEVELS: 'name' is just the specific name (e.g. "BUAH SATU"), prefixes like "LEVEL" are handled dynamically.
 const LEVELS: Record<number, LevelConfig> = {
-  1: { id: 1, name: "LEVEL 1: BUAH SATU", stages: [{ action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -10, catchRadius: 5.0, initialHandStones: 1, initialGroundStones: 4 },
-  2: { id: 2, name: "LEVEL 2: BUAH DUA", stages: [{ action: 'PICK', count: 2, message: "PICK 2 STONES" }, { action: 'PICK', count: 2, message: "PICK 2 STONES" }], gravity: -12, catchRadius: 4.5, initialHandStones: 1, initialGroundStones: 4 },
-  3: { id: 3, name: "LEVEL 3: BUAH TIGA", stages: [{ action: 'PICK', count: 3, message: "PICK 3 STONES" }, { action: 'PICK', count: 1, message: "PICK 1 STONE" }], gravity: -14, catchRadius: 4.0, initialHandStones: 1, initialGroundStones: 4 },
-  4: { id: 4, name: "LEVEL 4: BUAH EMPAT", stages: [{ action: 'PICK', count: 4, message: "PICK ALL 4 STONES" }], gravity: -15, catchRadius: 3.8, initialHandStones: 1, initialGroundStones: 4 },
-  5: { id: 5, name: "LEVEL 5: BUAH LIMA", stages: [{ action: 'PLACE', count: 4, message: "PLACE 4 STONES" }, { action: 'PICK', count: 4, message: "PICK ALL 4" }], gravity: -15, catchRadius: 3.8, initialHandStones: 5, initialGroundStones: 0 },
-  6: { id: 6, name: "LEVEL 6: TUKAR", stages: [{ action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }, { action: 'EXCHANGE', count: 1, message: "EXCHANGE STONE" }], gravity: -16, catchRadius: 3.5, initialHandStones: 2, initialGroundStones: 3 },
-  7: { id: 7, name: "LEVEL 7: ADVANCED", stages: [{ action: 'PICK', count: 1, message: "PICK 1 (FAST)" }, { action: 'PICK', count: 3, message: "PICK 3 (FAST)" }], gravity: -18, catchRadius: 3.2, initialHandStones: 1, initialGroundStones: 4 },
-  8: { id: 8, name: "LEVEL 8: TIMBANG", stages: [{ action: 'PICK', count: 4, message: "CHALLENGE: PICK ALL!" }], gravity: -20, catchRadius: 3.0, initialHandStones: 1, initialGroundStones: 4 },
+  1: { id: 1, name: "BUAH SATU", stages: [{ action: 'PICK', count: 1, messageKey: "msg_pick_1" }, { action: 'PICK', count: 1, messageKey: "msg_pick_1" }, { action: 'PICK', count: 1, messageKey: "msg_pick_1" }, { action: 'PICK', count: 1, messageKey: "msg_pick_1" }], gravity: -10, catchRadius: 5.0, initialHandStones: 1, initialGroundStones: 4 },
+  2: { id: 2, name: "BUAH DUA", stages: [{ action: 'PICK', count: 2, messageKey: "msg_pick_2" }, { action: 'PICK', count: 2, messageKey: "msg_pick_2" }], gravity: -12, catchRadius: 4.5, initialHandStones: 1, initialGroundStones: 4 },
+  3: { id: 3, name: "BUAH TIGA", stages: [{ action: 'PICK', count: 3, messageKey: "msg_pick_3" }, { action: 'PICK', count: 1, messageKey: "msg_pick_1" }], gravity: -14, catchRadius: 4.0, initialHandStones: 1, initialGroundStones: 4 },
+  4: { id: 4, name: "BUAH EMPAT", stages: [{ action: 'PICK', count: 4, messageKey: "msg_pick_4" }], gravity: -15, catchRadius: 3.8, initialHandStones: 1, initialGroundStones: 4 },
+  5: { id: 5, name: "BUAH LIMA", stages: [{ action: 'PLACE', count: 4, messageKey: "msg_place_4" }, { action: 'PICK', count: 4, messageKey: "msg_pick_4" }], gravity: -15, catchRadius: 3.8, initialHandStones: 5, initialGroundStones: 0 },
+  6: { id: 6, name: "TUKAR", stages: [{ action: 'EXCHANGE', count: 1, messageKey: "msg_exchange" }, { action: 'EXCHANGE', count: 1, messageKey: "msg_exchange" }, { action: 'EXCHANGE', count: 1, messageKey: "msg_exchange" }], gravity: -16, catchRadius: 3.5, initialHandStones: 2, initialGroundStones: 3 },
+  7: { id: 7, name: "ADVANCED", stages: [{ action: 'PICK', count: 1, messageKey: "msg_pick_1" }, { action: 'PICK', count: 3, messageKey: "msg_pick_3" }], gravity: -18, catchRadius: 3.2, initialHandStones: 1, initialGroundStones: 4 },
+  8: { id: 8, name: "TIMBANG", stages: [{ action: 'PICK', count: 4, messageKey: "msg_pick_4" }], gravity: -20, catchRadius: 3.0, initialHandStones: 1, initialGroundStones: 4 },
 };
 
-// --- MediaPipe Hook ---
 const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean, facingMode: string) => {
   const handPos = useRef(new THREE.Vector3(0, -3, 0)); 
   const isPinching = useRef(false);
@@ -109,7 +110,7 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
   return { handPos, isPinching };
 };
 
-// --- NEW COMPONENT: Reusable 3D Stone Model ---
+// --- Reusable 3D Stone Model (With Brightness) ---
 const BatuModel = ({ color, scale = 1, opacity = 1 }: any) => {
   const obj = useLoader(OBJLoader, '/models/white_mesh.obj') as THREE.Group;
   
@@ -119,10 +120,12 @@ const BatuModel = ({ color, scale = 1, opacity = 1 }: any) => {
       if (child.isMesh) {
         child.material = new THREE.MeshStandardMaterial({
           color: color,
-          roughness: 0.6,
+          roughness: 0.5, 
           metalness: 0.1,
           transparent: opacity < 1,
           opacity: opacity,
+          emissive: color, // Makes it bright/glowy
+          emissiveIntensity: 0.4
         });
       }
     });
@@ -132,7 +135,6 @@ const BatuModel = ({ color, scale = 1, opacity = 1 }: any) => {
   return <primitive object={clone} scale={[scale, scale, scale]} />;
 };
 
-// --- Hand Component (Code-Based) ---
 const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }: { position: THREE.Vector3, stonesInHand: number, isGrabbing: boolean, canToss: boolean, isMobile: boolean }) => {
   const group = useRef<THREE.Group>(null);
   const skinColor = isGrabbing ? "#86efac" : (canToss ? "#ffffff" : "#eecfad");
@@ -162,7 +164,6 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
 
   return (
     <group ref={group}>
-      {/* Palm */}
       <group scale={[1, 1, 0.6]}>
           <Sphere args={[0.6, 16, 16]} position={[0, 0, 0]}><meshStandardMaterial color={skinColor} /></Sphere>
           <Cylinder args={[0.55, 0.5, 0.8, 16]} position={[0, -0.4, 0]}><meshStandardMaterial color={skinColor} /></Cylinder>
@@ -182,7 +183,6 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
         </group>
       </group>
 
-      {/* Stones in Palm - Now using your 3D Model! */}
       {Array.from({ length: stonesInHand }).map((_, i) => (
          <group key={i} position={[-0.2 + i * 0.15, 0.4, 0.3]} rotation={[0, 0, Math.random()]}>
             <BatuModel color="#fbbf24" scale={0.2} />
@@ -192,12 +192,10 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
   );
 };
 
-// --- Tossed Stone (Using 3D Model) ---
 const BatuSandbag = ({ position, rotation }: { position: THREE.Vector3, rotation: THREE.Euler }) => (
   <group position={position} rotation={rotation}>
     <Float speed={10} rotationIntensity={2} floatIntensity={0}>
       <BatuModel color="#ea580c" scale={0.5} />
-      {/* Ghost Trail */}
       <group scale={[1.1, 1.1, 1.1]}>
          <BatuModel color="#fbbf24" scale={0.55} opacity={0.3} />
       </group>
@@ -205,7 +203,6 @@ const BatuSandbag = ({ position, rotation }: { position: THREE.Vector3, rotation
   </group>
 );
 
-// --- Ground Stones (Using 3D Model) ---
 const GroundStones = ({ count }: { count: number }) => (
     <group position={[0, -5.5, -1]}>
       {Array.from({ length: count }).map((_, i) => (
@@ -216,10 +213,11 @@ const GroundStones = ({ count }: { count: number }) => (
     </group>
 );
 
-// --- Game Logic ---
 const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMobile, manualTossRef, facingMode }: any) => {
   const { handPos, isPinching } = useMediaPipeInput(webcamRef, isMobile, facingMode);
   const config = LEVELS[level as number];
+  
+  const { t } = useLanguage();
   
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
   const [stonePos, setStonePos] = useState(new THREE.Vector3());
@@ -233,12 +231,15 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
   const [hasStarted, setHasStarted] = useState(false);
   const [canToss, setCanToss] = useState(true);
 
+  // Initialize and Translate Messages
   useEffect(() => {
     if (!hasStarted && handPos.current.y > -2.9) {
         setHasStarted(true);
-        setMessage(config.stages[0].message);
+        setMessage(t(config.stages[0].messageKey as any));
+    } else if (!hasStarted) {
+        setMessage(t('game_scan'));
     }
-  }, [handPos.current.y]);
+  }, [handPos.current.y, t, config, hasStarted]);
 
   useEffect(() => {
     const stage = config.stages[0];
@@ -246,11 +247,11 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
     setStonesOnGround(config.initialGroundStones);
     setStonesInHand(config.initialHandStones);
     setGameState(GameState.IDLE);
-    setMessage(stage.message);
+    setMessage(t(stage.messageKey as any));
     setActionPerformed(false);
     setCanToss(true);
     onProgress({ stage: 0, totalStages: config.stages.length });
-  }, [level, config]);
+  }, [level, config, t]);
 
   const currentStage = config.stages[currentStageIndex];
 
@@ -313,18 +314,18 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
 
         if (gameState === GameState.FALLING && newPos.distanceTo(handPos.current) < config.catchRadius) {
            if (currentStage && !actionPerformed) {
-              setMessage("MISSED ACTION!");
+              setMessage(t('game_missed'));
            } else {
               setStonesInHand(s => s + 1); 
               const nextStageIndex = currentStageIndex + 1;
               if (nextStageIndex >= config.stages.length) {
                 setGameState(GameState.LEVEL_COMPLETE);
-                setMessage("LEVEL COMPLETE!");
+                setMessage(t('game_level_complete'));
                 onLevelComplete();
               } else {
                 setGameState(GameState.CAUGHT);
                 setCurrentStageIndex(nextStageIndex);
-                setMessage(config.stages[nextStageIndex].message);
+                setMessage(t(config.stages[nextStageIndex].messageKey as any));
                 setActionPerformed(false); 
                 onProgress({ stage: nextStageIndex, totalStages: config.stages.length });
               }
@@ -332,7 +333,7 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
         }
         if (newPos.y < -6) {
           setGameState(GameState.DROPPED);
-          setMessage("DROPPED!");
+          setMessage(t('game_dropped'));
           onFail();
           setTimeout(() => {
             const stage = config.stages[0];
@@ -340,7 +341,7 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
             setStonesOnGround(config.initialGroundStones);
             setStonesInHand(config.initialHandStones);
             setGameState(GameState.IDLE);
-            setMessage(stage.message);
+            setMessage(t(stage.messageKey as any));
             setActionPerformed(false);
             setCanToss(true);
             onProgress({ stage: 0, totalStages: config.stages.length });
@@ -352,9 +353,9 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
 
   return (
     <>
-      <ambientLight intensity={0.6} />
-      <pointLight position={[10, 10, 10]} color="#fbbf24" intensity={1} />
-      <directionalLight position={[0, 5, 5]} intensity={0.5} />
+      <ambientLight intensity={2.0} />
+      <pointLight position={[10, 10, 10]} color="#fbbf24" intensity={1.5} />
+      <directionalLight position={[0, 5, 5]} intensity={1} />
 
       <MannequinHand position={handPos.current} stonesInHand={stonesInHand-1} isGrabbing={isPinching.current} canToss={canToss} isMobile={isMobile} />
       
@@ -367,10 +368,10 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
       </mesh>
       
       <Text position={[0, -2.5, 0]} fontSize={isMobile ? 0.35 : 0.3} color="white" fillOpacity={canToss ? 0.3 : 1}>
-          {canToss ? "DIP HAND HERE" : "⬇️ RELOAD"}
+          {canToss ? t('game_ready') : t('game_reload')}
       </Text>
       <Text position={[0, 2.0, 0]} fontSize={isMobile ? 0.35 : 0.3} color="white" fillOpacity={canToss ? 1 : 0.3}>
-          {canToss ? "⬆️ TOSS" : "WAIT..."}
+          {canToss ? t('game_toss_action') : t('game_wait')}
       </Text>
       <Text position={[0, 3.5, 0]} fontSize={isMobile ? 0.5 : 0.5} color="white" anchorX="center" anchorY="middle">{message}</Text>
     </>
@@ -378,7 +379,8 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
 };
 
 // --- Main Game Component ---
-const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
+// UPDATE: Added 'onExit' to props definition
+const Game: React.FC<{ onGameOver: () => void; onExit: () => void }> = ({ onGameOver, onExit }) => {
   const webcamRef = useRef<Webcam>(null);
   const manualTossRef = useRef<HTMLButtonElement>(null);
   const isMobile = useMemo(() => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent), []);
@@ -386,20 +388,40 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
   const [progress, setProgress] = useState({ stage: 0, totalStages: 1 });
   const [showOverlay, setShowOverlay] = useState(false);
   const [overlayMsg, setOverlayMsg] = useState("");
+  const [showChampionMenu, setShowChampionMenu] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [fitMode, setFitMode] = useState<'cover' | 'contain'>('cover');
 
   const currentConfig = LEVELS[level];
   const progressPercent = ((progress.stage) / progress.totalStages) * 100;
+  
+  const { t, lang } = useLanguage();
 
   const handleLevelComplete = () => {
-    setOverlayMsg(`LEVEL ${level} PASSED!`);
+    // FIX: Dynamic message "LEVEL 1 PASSED!" or "TAHAP 1 LULUS!"
+    const msg = lang === 'en' 
+        ? `LEVEL ${level} PASSED!` 
+        : `TAHAP ${level} LULUS!`;
+    
+    setOverlayMsg(msg);
     setShowOverlay(true);
+    
     setTimeout(() => {
-       if (level < 8) setLevel(l => l + 1);
-       else { setOverlayMsg("CHAMPION!"); onGameOver(); }
-       setShowOverlay(false);
+       if (level < 8) {
+           setLevel(l => l + 1);
+           setShowOverlay(false);
+       }
+       else { 
+           setOverlayMsg(t('game_champion')); 
+           setShowChampionMenu(true); 
+       }
     }, 2500);
+  };
+
+  const handlePlayAgain = () => {
+      setLevel(1);
+      setShowChampionMenu(false);
+      setShowOverlay(false);
   };
 
   const videoConstraints = isMobile ? MOBILE_CONSTRAINTS : DESKTOP_CONSTRAINTS;
@@ -417,6 +439,7 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
       <div className="absolute inset-0 z-10">
         <Canvas dpr={[1, 1]} camera={{ position: [0, 0, 8], fov: isMobile ? 75 : 50 }}>
           <Suspense fallback={null}>
+             {/* Note: Ensure GameScene is imported or defined above */}
              <GameScene 
                 webcamRef={webcamRef} 
                 level={level} 
@@ -434,16 +457,21 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
 
       <button 
         ref={manualTossRef}
-        className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-heritage-orange/90 active:bg-heritage-orange text-white w-20 h-20 rounded-full border-4 border-white/20 shadow-xl flex items-center justify-center font-bold tracking-widest animate-pulse"
+        className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-heritage-orange/90 active:bg-heritage-orange text-white w-20 h-20 rounded-full border-4 border-white/20 shadow-xl flex items-center justify-center font-bold tracking-widest animate-pulse text-xs"
       >
-        TOSS
+        {t('game_toss_btn')}
       </button>
 
       {/* Top Banner */}
       <div className={`absolute ${isMobile ? 'top-4 left-1/2 transform -translate-x-1/2 w-[90%]' : 'top-24 left-6 w-64'} z-20 pointer-events-none`}>
         <div className="bg-heritage-black/80 border border-heritage-orange/50 p-3 rounded-lg backdrop-blur-md shadow-lg text-center md:text-left flex flex-col items-center md:items-start">
-          <h3 className="text-heritage-orange font-serif text-lg font-bold">{currentConfig.name}</h3>
-          <p className="text-heritage-gray text-[10px] uppercase tracking-widest mb-1 h-4">{currentConfig.stages[progress.stage]?.message}</p>
+          {/* FIX: Dynamic Title "LEVEL 1: BUAH SATU" vs "TAHAP 1: BUAH SATU" */}
+          <h3 className="text-heritage-orange font-serif text-lg font-bold">
+             {t('game_level_prefix')} {currentConfig.id}: {currentConfig.name}
+          </h3>
+          <p className="text-heritage-gray text-[10px] uppercase tracking-widest mb-1 h-4">
+             {t(currentConfig.stages[progress.stage]?.messageKey as any)}
+          </p>
           <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden mb-1">
              <div className="bg-heritage-orange h-full transition-all duration-300" style={{ width: `${progressPercent}%` }} />
           </div>
@@ -463,10 +491,30 @@ const Game: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
       </div>
 
       {showOverlay && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-heritage-black/90 backdrop-blur-sm">
-          <div className="text-center animate-bounce">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-heritage-black/90 backdrop-blur-sm">
+          <div className="text-center animate-bounce mb-8">
             <h1 className="text-5xl font-serif text-heritage-orange mb-4 drop-shadow-[0_0_15px_rgba(234,88,12,0.8)]">{overlayMsg}</h1>
           </div>
+          
+          {/* --- CHAMPION MENU --- */}
+          {showChampionMenu && (
+              <div className="flex flex-col gap-4 animate-fade-in-up pointer-events-auto">
+                  <button 
+                    onClick={handlePlayAgain}
+                    className="bg-heritage-orange text-white px-8 py-4 font-bold text-xl rounded-full hover:scale-105 transition-transform"
+                  >
+                    Play Again
+                  </button>
+                  
+                  {/* --- UPDATED BUTTON: Calls onExit and labeled EXIT --- */}
+                  <button 
+                    onClick={onExit} // Uses the new prop to return to Home
+                    className="bg-white/10 text-white px-8 py-4 font-bold text-xl rounded-full border border-white/20 hover:bg-white/20 transition-colors"
+                  >
+                    EXIT
+                  </button>
+              </div>
+          )}
         </div>
       )}
     </div>

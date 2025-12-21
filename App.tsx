@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import Tutorial from './pages/Tutorial';
 import Game from './pages/Game';
 import Chat from './pages/Chat';
+import { LanguageProvider } from './context/LanguageContext';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
@@ -17,7 +18,14 @@ const App: React.FC = () => {
   
   const handleGameOver = () => {
     setIsGameOver(true);
+    // Auto-exit after 5 seconds if player loses
     setTimeout(() => setActiveTab('home'), 5000); 
+  }
+
+  // New function to immediately exit
+  const handleGameExit = () => {
+    setIsGameOver(false);
+    setActiveTab('home');
   }
 
   const renderContent = () => {
@@ -29,7 +37,11 @@ const App: React.FC = () => {
       case 'chat':
         return <Chat />;
       case 'game':
-        return <Game key={Date.now()} onGameOver={handleGameOver} />;
+        return <Game 
+          key={Date.now()} 
+          onGameOver={handleGameOver} 
+          onExit={handleGameExit} // <--- PASS THIS NEW PROP
+        />;
       default:
         return <Home onStart={handleGameStart} />;
     }
@@ -39,27 +51,28 @@ const App: React.FC = () => {
   const isChatActive = activeTab === 'chat';
 
   return (
-    // FIX 1: Changed 'overflow-hidden' to 'overflow-y-auto overflow-x-hidden'
-    // This allows vertical scrolling when content (like the stones) gets pushed down
-    <div className="bg-heritage-black h-[100dvh] w-full overflow-y-auto overflow-x-hidden text-white font-sans selection:bg-heritage-orange selection:text-white flex flex-col">
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} isGameActive={isGameActive} />
-      
-      {isGameActive && !isGameOver && (
-          <button 
-            onClick={() => setActiveTab('home')} 
-            className="fixed top-6 right-6 z-50 bg-black/50 text-white px-4 py-2 border border-white/20 hover:bg-heritage-orange transition-colors text-xs tracking-widest"
-          >
-            EXIT GAME
-          </button>
-      )}
+    <LanguageProvider>
+      <div className="bg-heritage-black h-[100dvh] w-full overflow-y-auto overflow-x-hidden text-white font-sans selection:bg-heritage-orange selection:text-white flex flex-col">
+        
+        <Navbar activeTab={activeTab} setActiveTab={setActiveTab} isGameActive={isGameActive} />
+        
+        {/* Top Right Exit Button */}
+        {isGameActive && !isGameOver && (
+            <button 
+              onClick={handleGameExit} 
+              className="fixed top-6 right-6 z-50 bg-black/50 text-white px-4 py-2 border border-white/20 hover:bg-heritage-orange transition-colors text-xs tracking-widest"
+            >
+              EXIT GAME
+            </button>
+        )}
 
-      {/* FIX 2: Removed 'h-full' to allow the main content to grow as tall as it needs */}
-      <main className="flex-grow relative w-full">
-        {renderContent()}
-      </main>
+        <main className="flex-grow relative w-full">
+          {renderContent()}
+        </main>
 
-      {!isGameActive && !isChatActive && <Footer />}
-    </div>
+        {!isGameActive && !isChatActive && <Footer />}
+      </div>
+    </LanguageProvider>
   );
 };
 
