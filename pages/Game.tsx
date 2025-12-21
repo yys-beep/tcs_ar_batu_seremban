@@ -8,10 +8,6 @@ import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { OBJLoader } from 'three-stdlib';
 import { useLanguage } from '../context/LanguageContext';
 
-// ... (Configuration, LEVELS, useMediaPipeInput, BatuModel, MannequinHand, BatuSandbag, GroundStones, GameScene - KEEP ALL THESE THE SAME) ...
-// For brevity, I am pasting the necessary imports and the Main Component updates. 
-// Please keep your existing helper functions above "GameScene".
-
 // --- Configuration ---
 const MOBILE_CONSTRAINTS = {
   facingMode: "environment",
@@ -113,15 +109,13 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
   return { handPos, isPinching };
 };
 
-// --- Reusable 3D Stone Model ---
-const BatuModel = ({ color, scale = 1, opacity = 1, withBorder = false }: { color: string, scale?: number, opacity?: number, withBorder?: boolean }) => {
+// --- BatuModel (Reverted to Original Style: No Border, Solid Color) ---
+const BatuModel = ({ color, scale = 1, opacity = 1 }: { color: string, scale?: number, opacity?: number }) => {
   const obj = useLoader(OBJLoader, '/models/white_mesh.obj') as THREE.Group;
   
   const clone = useMemo(() => {
-    const group = obj.clone();
-    let geometryToOutline: THREE.BufferGeometry | null = null;
-
-    group.traverse((child: any) => {
+    const c = obj.clone();
+    c.traverse((child: any) => {
       if (child.isMesh) {
         child.material = new THREE.MeshStandardMaterial({
           color: color,
@@ -132,22 +126,10 @@ const BatuModel = ({ color, scale = 1, opacity = 1, withBorder = false }: { colo
           emissive: color,
           emissiveIntensity: 0.4
         });
-        geometryToOutline = child.geometry;
       }
     });
-
-    if (withBorder && geometryToOutline) {
-        const outlineMaterial = new THREE.MeshBasicMaterial({ 
-            color: 'black', 
-            side: THREE.BackSide 
-        });
-        const outlineMesh = new THREE.Mesh(geometryToOutline, outlineMaterial);
-        outlineMesh.scale.set(1.15, 1.15, 1.15); 
-        group.add(outlineMesh);
-    }
-
-    return group;
-  }, [obj, color, opacity, withBorder]);
+    return c;
+  }, [obj, color, opacity]);
 
   return <primitive object={clone} scale={[scale, scale, scale]} />;
 };
@@ -200,9 +182,10 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
         </group>
       </group>
 
+      {/* Stones in Palm */}
       {Array.from({ length: stonesInHand }).map((_, i) => (
          <group key={i} position={[-0.2 + i * 0.15, 0.4, 0.3]} rotation={[0, 0, Math.random()]}>
-            <BatuModel color="#fbbf24" scale={0.2} withBorder={true} />
+            <BatuModel color="#fbbf24" scale={0.2} />
          </group>
       ))}
     </group>
@@ -221,7 +204,8 @@ const BatuSandbag = ({ position, rotation }: { position: THREE.Vector3, rotation
 );
 
 const GroundStones = ({ count }: { count: number }) => (
-    <group position={[0, -5.5, -1]}>
+    // FIX: Raised ground stones from -5.5 to -3.5 to be visible on PC
+    <group position={[0, -3.5, -1]}>
       {Array.from({ length: count }).map((_, i) => (
         <group key={i} position={[-1.5 + i * 1, 0, 0]} rotation={[i*2, i*3, i*0.5]}>
            <BatuModel color="#52525b" scale={0.4} />
@@ -368,6 +352,11 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
     }
   });
 
+  // FIX: Action Text Position
+  // Mobile: 0.5 (Lower, avoids Level Banner)
+  // Desktop: 3.5 (Higher, visible on large screen)
+  const textY = isMobile ? 0.5 : 3.5;
+
   return (
     <>
       <ambientLight intensity={2.0} />
@@ -390,7 +379,9 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
       <Text position={[0, 2.0, 0]} fontSize={isMobile ? 0.35 : 0.3} color="white" fillOpacity={canToss ? 1 : 0.3}>
           {canToss ? t('game_toss_action') : t('game_wait')}
       </Text>
-      <Text position={[0, 3.5, 0]} fontSize={isMobile ? 0.5 : 0.5} color="white" anchorX="center" anchorY="middle">{message}</Text>
+      
+      {/* 3D Action Message */}
+      <Text position={[0, textY, 0]} fontSize={isMobile ? 0.5 : 0.5} color="white" anchorX="center" anchorY="middle">{message}</Text>
     </>
   );
 };
@@ -476,9 +467,9 @@ const Game: React.FC<{ onGameOver: () => void; onExit: () => void }> = ({ onGame
         {t('game_toss_btn')}
       </button>
 
-      {/* --- BANNER POSITION FIX --- */}
-      {/* Changed top-4 to top-16 on mobile to clear the new Exit Button space */}
-      <div className={`absolute top-16 md:top-24 left-1/2 transform -translate-x-1/2 w-[90%] md:w-64 z-20 pointer-events-none`}>
+      {/* --- LEVEL BANNER --- */}
+      {/* Mobile: Top-24 (Center). Desktop: Top-6, Left-6 (Left Side). */}
+      <div className={`absolute top-24 left-1/2 transform -translate-x-1/2 w-[90%] md:top-6 md:left-6 md:transform-none md:w-64 z-20 pointer-events-none`}>
         <div className="bg-heritage-black/80 border border-heritage-orange/50 p-3 rounded-lg backdrop-blur-md shadow-lg text-center md:text-left flex flex-col items-center md:items-start">
           <h3 className="text-heritage-orange font-serif text-lg font-bold">
              {t('game_level_prefix')} {currentConfig.id}: {currentConfig.name}
@@ -492,6 +483,16 @@ const Game: React.FC<{ onGameOver: () => void; onExit: () => void }> = ({ onGame
         </div>
       </div>
 
+      {/* --- EXIT BUTTON --- */}
+      {/* Fixed to Top-Right. Transparent with Border. "EXIT GAME" text. */}
+      <button 
+        onClick={onExit} 
+        className="fixed top-6 right-6 z-50 bg-transparent border-2 border-white/50 text-white px-6 py-2 rounded-full hover:bg-white/10 hover:border-white transition-all text-xs font-bold tracking-widest shadow-lg flex items-center gap-2"
+      >
+        EXIT GAME
+      </button>
+
+      {/* Bottom Controls */}
       <div className="absolute bottom-6 left-6 z-50">
         <button onClick={() => setFitMode(prev => prev === 'cover' ? 'contain' : 'cover')} className="bg-black/60 text-white w-12 h-12 rounded-full border border-white/20 hover:bg-heritage-orange transition-colors flex items-center justify-center">
             {fitMode === 'cover' ? <span className="text-[10px] font-bold">UNZOOM</span> : <span className="text-[10px] font-bold">FILL</span>}
@@ -507,11 +508,8 @@ const Game: React.FC<{ onGameOver: () => void; onExit: () => void }> = ({ onGame
       {showOverlay && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-heritage-black/90 backdrop-blur-sm px-6">
           <div className="text-center animate-bounce mb-8 w-full">
-            {/* --- TEXT SIZE FIX --- */}
-            {/* Changed from text-5xl to text-3xl md:text-5xl for responsiveness */}
-            <h1 className="text-3xl md:text-5xl font-serif text-heritage-orange mb-4 drop-shadow-[0_0_15px_rgba(234,88,12,0.8)] break-words w-full">
-                {overlayMsg}
-            </h1>
+            {/* Overlay Text: Smaller on mobile to fit */}
+            <h1 className="text-3xl md:text-5xl font-serif text-heritage-orange mb-4 drop-shadow-[0_0_15px_rgba(234,88,12,0.8)] break-words w-full">{overlayMsg}</h1>
           </div>
           
           {showChampionMenu && (

@@ -54,18 +54,7 @@ const App: React.FC = () => {
         
         <Navbar activeTab={activeTab} setActiveTab={setActiveTab} isGameActive={isGameActive} />
         
-        {/* Exit Button - Top Left on Mobile, Top Right on Desktop */}
-        {isGameActive && !isGameOver && (
-            <button 
-              onClick={handleGameExit} 
-              className="fixed top-4 left-4 md:top-6 md:right-6 md:left-auto z-50 bg-black/60 backdrop-blur-md text-white px-4 py-2 border border-white/20 rounded-full hover:bg-heritage-orange transition-colors text-[10px] md:text-xs font-bold tracking-widest shadow-lg flex items-center gap-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 md:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-              EXIT
-            </button>
-        )}
+        {/* DUPLICATE BUTTON REMOVED FROM HERE */}
 
         <main className="flex-grow relative w-full">
           {renderContent()}
