@@ -46,24 +46,42 @@ interface HomeProps {
 const Home: React.FC<HomeProps> = ({ onStart }) => {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  
-  // 1. Get 'lang' from context so we know which voice to use
   const { t, lang } = useLanguage();
 
+  // --- NEW: Force Voice Selection Logic ---
   const handleSpeak = () => {
+    // 1. Cancel any current speech
     if (isSpeaking) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
       return;
     }
-    
+
     const text = t('home_desc'); 
     const utterance = new SpeechSynthesisUtterance(text);
     
-    // 2. THE FIX: Set the correct voice language accent
-    // 'ms-MY' is standard for Malay, 'en-US' for English
-    utterance.lang = lang === 'bm' ? 'ms-MY' : 'en-US';
-    
+    // 2. Get all available voices on the device
+    const voices = window.speechSynthesis.getVoices();
+
+    if (lang === 'bm') {
+        utterance.lang = 'ms-MY';
+        
+        // Strategy: 
+        // 1. Try to find an exact Malay voice (ms-MY)
+        // 2. If not found, try Indonesian (id-ID) because it sounds 99% like Malay and is more common on Android/Windows
+        const specificVoice = voices.find(v => v.lang === 'ms-MY' || v.lang === 'ms_MY') 
+                           || voices.find(v => v.lang === 'id-ID' || v.lang === 'id_ID');
+        
+        if (specificVoice) {
+            utterance.voice = specificVoice;
+        }
+    } else {
+        utterance.lang = 'en-US';
+        // Optional: Prefer a standard English voice if you want
+        const engVoice = voices.find(v => v.lang === 'en-US');
+        if (engVoice) utterance.voice = engVoice;
+    }
+
     utterance.rate = 0.9; 
     utterance.onend = () => setIsSpeaking(false);
     
@@ -71,7 +89,9 @@ const Home: React.FC<HomeProps> = ({ onStart }) => {
     setIsSpeaking(true);
   };
 
+  // Ensure voices are loaded (Chrome sometimes loads them asynchronously)
   useEffect(() => {
+    window.speechSynthesis.getVoices();
     return () => window.speechSynthesis.cancel();
   }, []);
 
@@ -101,7 +121,6 @@ const Home: React.FC<HomeProps> = ({ onStart }) => {
 
         <div className="w-full md:w-1/2 h-[500px] md:h-[80vh] relative z-0 mt-8 md:mt-0 order-2 md:order-2">
             <Canvas shadows camera={{ position: [0, 0, 8], fov: 45 }}>
-                {/* Kept the brighter lighting intensity */}
                 <ambientLight intensity={3.0} /> 
                 <spotLight position={[10, 10, 10]} angle={0.2} penumbra={1} intensity={2.0} />
                 <pointLight position={[-10, -5, -5]} color="#ffffff" intensity={1} /> 
@@ -138,7 +157,6 @@ const Home: React.FC<HomeProps> = ({ onStart }) => {
                 <div className="space-y-6 text-heritage-cream leading-relaxed">
                     <div><p>{t('hist_intro')}</p></div>
                     
-                    {/* SECTION 1: EVOLUTION */}
                     <div>
                         <h3 className="text-lg font-bold text-white mb-2">{t('hist_section_1')}</h3>
                         <ul className="list-none space-y-1 text-heritage-gray">
@@ -148,13 +166,11 @@ const Home: React.FC<HomeProps> = ({ onStart }) => {
                         </ul>
                     </div>
 
-                    {/* SECTION 2: SEWING TRADITION */}
                     <div className="bg-heritage-orange/10 p-4 rounded-r-lg border-l-4 border-heritage-orange">
                         <h3 className="text-lg font-bold text-white mb-2">{t('hist_section_sewing')}</h3>
                         <p className="text-heritage-gray text-sm italic">{t('hist_p_sewing')}</p>
                     </div>
 
-                    {/* SECTION 3: OBJECTIVE */}
                     <div className="mt-4 border-t border-white/10 pt-4">
                         <h3 className="text-lg font-bold text-heritage-gold mb-2">{t('hist_section_2')}</h3>
                         <p className="text-sm text-heritage-gray leading-relaxed">{t('hist_p2')}</p>
