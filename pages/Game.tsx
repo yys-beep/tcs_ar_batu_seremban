@@ -8,6 +8,10 @@ import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { OBJLoader } from 'three-stdlib';
 import { useLanguage } from '../context/LanguageContext';
 
+// ... (Configuration, LEVELS, useMediaPipeInput, BatuModel, MannequinHand, BatuSandbag, GroundStones, GameScene - KEEP ALL THESE THE SAME) ...
+// For brevity, I am pasting the necessary imports and the Main Component updates. 
+// Please keep your existing helper functions above "GameScene".
+
 // --- Configuration ---
 const MOBILE_CONSTRAINTS = {
   facingMode: "environment",
@@ -29,7 +33,6 @@ enum GameState { IDLE, HOLDING, TOSSING, FALLING, CAUGHT, DROPPED, LEVEL_COMPLET
 interface StageConfig { action: 'PICK' | 'PLACE' | 'EXCHANGE'; count: number; messageKey: string; }
 interface LevelConfig { id: number; name: string; stages: StageConfig[]; gravity: number; catchRadius: number; initialHandStones: number; initialGroundStones: number; }
 
-// Updated LEVELS: 'name' is just the specific name (e.g. "BUAH SATU"), prefixes like "LEVEL" are handled dynamically.
 const LEVELS: Record<number, LevelConfig> = {
   1: { id: 1, name: "BUAH SATU", stages: [{ action: 'PICK', count: 1, messageKey: "msg_pick_1" }, { action: 'PICK', count: 1, messageKey: "msg_pick_1" }, { action: 'PICK', count: 1, messageKey: "msg_pick_1" }, { action: 'PICK', count: 1, messageKey: "msg_pick_1" }], gravity: -10, catchRadius: 5.0, initialHandStones: 1, initialGroundStones: 4 },
   2: { id: 2, name: "BUAH DUA", stages: [{ action: 'PICK', count: 2, messageKey: "msg_pick_2" }, { action: 'PICK', count: 2, messageKey: "msg_pick_2" }], gravity: -12, catchRadius: 4.5, initialHandStones: 1, initialGroundStones: 4 },
@@ -110,13 +113,15 @@ const useMediaPipeInput = (webcamRef: React.RefObject<Webcam>, isMobile: boolean
   return { handPos, isPinching };
 };
 
-// --- Reusable 3D Stone Model (With Brightness) ---
-const BatuModel = ({ color, scale = 1, opacity = 1 }: any) => {
+// --- Reusable 3D Stone Model ---
+const BatuModel = ({ color, scale = 1, opacity = 1, withBorder = false }: { color: string, scale?: number, opacity?: number, withBorder?: boolean }) => {
   const obj = useLoader(OBJLoader, '/models/white_mesh.obj') as THREE.Group;
   
   const clone = useMemo(() => {
-    const c = obj.clone();
-    c.traverse((child: any) => {
+    const group = obj.clone();
+    let geometryToOutline: THREE.BufferGeometry | null = null;
+
+    group.traverse((child: any) => {
       if (child.isMesh) {
         child.material = new THREE.MeshStandardMaterial({
           color: color,
@@ -124,13 +129,25 @@ const BatuModel = ({ color, scale = 1, opacity = 1 }: any) => {
           metalness: 0.1,
           transparent: opacity < 1,
           opacity: opacity,
-          emissive: color, // Makes it bright/glowy
+          emissive: color,
           emissiveIntensity: 0.4
         });
+        geometryToOutline = child.geometry;
       }
     });
-    return c;
-  }, [obj, color, opacity]);
+
+    if (withBorder && geometryToOutline) {
+        const outlineMaterial = new THREE.MeshBasicMaterial({ 
+            color: 'black', 
+            side: THREE.BackSide 
+        });
+        const outlineMesh = new THREE.Mesh(geometryToOutline, outlineMaterial);
+        outlineMesh.scale.set(1.15, 1.15, 1.15); 
+        group.add(outlineMesh);
+    }
+
+    return group;
+  }, [obj, color, opacity, withBorder]);
 
   return <primitive object={clone} scale={[scale, scale, scale]} />;
 };
@@ -185,7 +202,7 @@ const MannequinHand = ({ position, stonesInHand, isGrabbing, canToss, isMobile }
 
       {Array.from({ length: stonesInHand }).map((_, i) => (
          <group key={i} position={[-0.2 + i * 0.15, 0.4, 0.3]} rotation={[0, 0, Math.random()]}>
-            <BatuModel color="#fbbf24" scale={0.2} />
+            <BatuModel color="#fbbf24" scale={0.2} withBorder={true} />
          </group>
       ))}
     </group>
@@ -379,7 +396,6 @@ const GameScene = ({ webcamRef, level, onProgress, onLevelComplete, onFail, isMo
 };
 
 // --- Main Game Component ---
-// UPDATE: Added 'onExit' to props definition
 const Game: React.FC<{ onGameOver: () => void; onExit: () => void }> = ({ onGameOver, onExit }) => {
   const webcamRef = useRef<Webcam>(null);
   const manualTossRef = useRef<HTMLButtonElement>(null);
@@ -398,7 +414,6 @@ const Game: React.FC<{ onGameOver: () => void; onExit: () => void }> = ({ onGame
   const { t, lang } = useLanguage();
 
   const handleLevelComplete = () => {
-    // FIX: Dynamic message "LEVEL 1 PASSED!" or "TAHAP 1 LULUS!"
     const msg = lang === 'en' 
         ? `LEVEL ${level} PASSED!` 
         : `TAHAP ${level} LULUS!`;
@@ -439,7 +454,6 @@ const Game: React.FC<{ onGameOver: () => void; onExit: () => void }> = ({ onGame
       <div className="absolute inset-0 z-10">
         <Canvas dpr={[1, 1]} camera={{ position: [0, 0, 8], fov: isMobile ? 75 : 50 }}>
           <Suspense fallback={null}>
-             {/* Note: Ensure GameScene is imported or defined above */}
              <GameScene 
                 webcamRef={webcamRef} 
                 level={level} 
@@ -462,10 +476,10 @@ const Game: React.FC<{ onGameOver: () => void; onExit: () => void }> = ({ onGame
         {t('game_toss_btn')}
       </button>
 
-      {/* Top Banner */}
-      <div className={`absolute ${isMobile ? 'top-4 left-1/2 transform -translate-x-1/2 w-[90%]' : 'top-24 left-6 w-64'} z-20 pointer-events-none`}>
+      {/* --- BANNER POSITION FIX --- */}
+      {/* Changed top-4 to top-16 on mobile to clear the new Exit Button space */}
+      <div className={`absolute top-16 md:top-24 left-1/2 transform -translate-x-1/2 w-[90%] md:w-64 z-20 pointer-events-none`}>
         <div className="bg-heritage-black/80 border border-heritage-orange/50 p-3 rounded-lg backdrop-blur-md shadow-lg text-center md:text-left flex flex-col items-center md:items-start">
-          {/* FIX: Dynamic Title "LEVEL 1: BUAH SATU" vs "TAHAP 1: BUAH SATU" */}
           <h3 className="text-heritage-orange font-serif text-lg font-bold">
              {t('game_level_prefix')} {currentConfig.id}: {currentConfig.name}
           </h3>
@@ -491,12 +505,15 @@ const Game: React.FC<{ onGameOver: () => void; onExit: () => void }> = ({ onGame
       </div>
 
       {showOverlay && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-heritage-black/90 backdrop-blur-sm">
-          <div className="text-center animate-bounce mb-8">
-            <h1 className="text-5xl font-serif text-heritage-orange mb-4 drop-shadow-[0_0_15px_rgba(234,88,12,0.8)]">{overlayMsg}</h1>
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-heritage-black/90 backdrop-blur-sm px-6">
+          <div className="text-center animate-bounce mb-8 w-full">
+            {/* --- TEXT SIZE FIX --- */}
+            {/* Changed from text-5xl to text-3xl md:text-5xl for responsiveness */}
+            <h1 className="text-3xl md:text-5xl font-serif text-heritage-orange mb-4 drop-shadow-[0_0_15px_rgba(234,88,12,0.8)] break-words w-full">
+                {overlayMsg}
+            </h1>
           </div>
           
-          {/* --- CHAMPION MENU --- */}
           {showChampionMenu && (
               <div className="flex flex-col gap-4 animate-fade-in-up pointer-events-auto">
                   <button 
@@ -505,10 +522,8 @@ const Game: React.FC<{ onGameOver: () => void; onExit: () => void }> = ({ onGame
                   >
                     Play Again
                   </button>
-                  
-                  {/* --- UPDATED BUTTON: Calls onExit and labeled EXIT --- */}
                   <button 
-                    onClick={onExit} // Uses the new prop to return to Home
+                    onClick={onExit} 
                     className="bg-white/10 text-white px-8 py-4 font-bold text-xl rounded-full border border-white/20 hover:bg-white/20 transition-colors"
                   >
                     EXIT
