@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             fontFamily: {
@@ -18,10 +19,12 @@
               heritage: {
                 black: '#09090b',
                 dark: '#18181b',
+                white: '#fafaf9',
+                cream: '#f5f5f4',
                 orange: '#ea580c', // Burnt Orange
                 gold: '#fbbf24',
-                cream: '#fafaf9',
-                gray: '#a1a1aa'
+                gray: '#57534e',
+                stone: '#a1a1aa'
               }
             },
             animation: {
@@ -55,21 +58,18 @@
     </script>
     <style>
       body {
-        background-color: #09090b;
-        color: #fafaf9;
+        transition: background-color 0.3s ease, color 0.3s ease;
         overflow-x: hidden;
       }
-      /* Custom scrollbar */
-      ::-webkit-scrollbar {
-        width: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #18181b;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #ea580c;
-        border-radius: 4px;
-      }
+     /* Theme-aware backgrounds */
+      .dark body { background-color: #09090b; color: #fafaf9; }
+      .light body { background-color: #fafaf9; color: #09090b; }
+      
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      .dark ::-webkit-scrollbar-track { background: #18181b; }
+      .light ::-webkit-scrollbar-track { background: #f5f5f4; }
+      ::-webkit-scrollbar-thumb { background: #ea580c; border-radius: 4px; }
     </style>
   <script type="importmap">
 {
@@ -86,7 +86,7 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
+
 </head>
   <body>
     <div id="root"></div>
