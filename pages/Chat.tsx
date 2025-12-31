@@ -55,14 +55,14 @@ const Chat: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen pt-24 bg-heritage-black flex flex-col items-center">
+    <div className="min-h-screen pt-24 transition-colors duration-300 bg-heritage-white dark:bg-heritage-black flex flex-col items-center">
       <div className="w-full max-w-4xl px-6 flex-1 flex flex-col">
         <div className="text-center mb-10 animate-fade-in-up">
           <h1 className="text-4xl md:text-5xl font-serif text-heritage-orange">{t('chat_title')}</h1>
-          <p className="text-heritage-gray mt-2">{t('chat_subtitle')}</p>
+          <p className="text-heritage-gray dark:text-heritage-stone mt-2 transition-colors">{t('chat_subtitle')}</p>
         </div>
 
-        <div className="flex-1 w-full bg-heritage-dark border border-heritage-gray/10 flex flex-col shadow-2xl rounded-t-lg overflow-hidden">
+        <div className="flex-1 w-full bg-white dark:bg-heritage-dark border border-heritage-gray/10 dark:border-white/5 flex flex-col shadow-2xl rounded-t-lg overflow-hidden transition-colors duration-300">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {messages.map((msg) => (
@@ -73,20 +73,19 @@ const Chat: React.FC = () => {
                       <span className="text-white font-serif font-bold text-lg">B</span>
                     </div>
                   )}
-                  <div className={`max-w-[85%] p-4 rounded-lg text-sm leading-relaxed shadow-md ${
+                  <div className={`max-w-[85%] p-4 rounded-lg text-sm leading-relaxed shadow-md transition-colors ${
                     msg.role === 'user' 
                       ? 'bg-heritage-orange text-white rounded-br-none' 
-                      : 'bg-zinc-800 text-heritage-cream rounded-bl-none'
+                      : 'bg-heritage-cream dark:bg-zinc-800 text-heritage-black dark:text-heritage-cream rounded-bl-none'
                   }`}>
                     {msg.text}
                   </div>
                 </div>
                 {msg.role === 'model' && msg.sources && msg.sources.length > 0 && (
-                  <div className="mt-3 ml-12 text-xs text-heritage-gray flex flex-wrap gap-2">
+                  <div className="mt-3 ml-12 text-xs text-heritage-gray dark:text-heritage-stone flex flex-wrap gap-2 transition-colors">
                       <span className="font-bold text-heritage-orange self-center">{t('chat_sources')}</span>
                       {msg.sources.map((source, i) => (
-                        <a key={i} href={source.uri} target="_blank" rel="noopener noreferrer" className="underline hover:text-heritage-orange transition-colors bg-zinc-900/50 px-2 py-0.5 rounded border border-white/5">
-                          {source.title}
+                        <a key={i} href={source.uri} target="_blank" rel="noopener noreferrer" className="underline hover:text-heritage-orange transition-colors bg-heritage-gray/5 dark:bg-zinc-900/50 px-2 py-0.5 rounded border border-heritage-gray/10 dark:border-white/5">
                         </a>
                       ))}
                   </div>
@@ -94,7 +93,7 @@ const Chat: React.FC = () => {
                  {msg.role === 'model' && msg.followUpQuestions && msg.followUpQuestions.length > 0 && (
                   <div className="mt-4 ml-12 text-sm flex flex-col items-start gap-2">
                       {msg.followUpQuestions.map((q, i) => (
-                        <button key={i} onClick={() => handleSend(q)} className="text-left text-heritage-gold hover:text-white transition-colors bg-heritage-gold/10 hover:bg-heritage-gold/20 px-4 py-2 rounded-full w-auto border border-heritage-gold/20">
+                        <button key={i} onClick={() => handleSend(q)} className="text-left text-heritage-gold dark:text-heritage-gold hover:text-white transition-colors bg-heritage-gold/10 hover:bg-heritage-gold/20 px-4 py-2 rounded-full w-auto border border-heritage-gold/20">
                           {q}
                         </button>
                       ))}
@@ -104,30 +103,20 @@ const Chat: React.FC = () => {
             ))}
             {loading && (
               <div className="flex items-start gap-4 justify-start animate-message-in">
-                  <div className="w-8 h-8 bg-heritage-orange rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                    <span className="text-white font-serif font-bold text-lg animate-pulse">B</span>
-                  </div>
-                  <div className="bg-zinc-800 p-4 rounded-lg rounded-bl-none text-sm text-heritage-orange animate-pulse">
-                      {t('chat_loading')}
-                  </div>
+                  <div className="w-8 h-8 bg-heritage-orange rounded-full flex items-center justify-center flex-shrink-0 mt-1"><span className="text-white font-serif font-bold text-lg animate-pulse">B</span></div>
+                  <div className="bg-heritage-cream dark:bg-zinc-800 p-4 rounded-lg rounded-bl-none text-sm text-heritage-orange animate-pulse">{t('chat_loading')}</div>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
-          {/* Input */}
-          <div className="p-4 border-t border-heritage-gray/10 bg-zinc-900/50 backdrop-blur-sm">
+          <div className="p-4 border-t border-heritage-gray/10 dark:border-white/5 bg-heritage-cream/30 dark:bg-zinc-900/50 backdrop-blur-sm transition-colors duration-300">
             <div className="flex gap-3">
               <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && !loading && handleSend()}
+                type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && !loading && handleSend()}
                 placeholder={t('chat_placeholder')}
-                className="flex-1 bg-black border border-zinc-700 text-white p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-heritage-orange transition-all font-sans text-sm placeholder-zinc-500"
+                className="flex-1 bg-white dark:bg-black border border-heritage-gray/20 dark:border-zinc-700 text-heritage-black dark:text-white p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-heritage-orange transition-all font-sans text-sm placeholder-heritage-gray/50"
               />
-              <button onClick={() => handleSend()} disabled={loading || !input.trim()} className="bg-heritage-orange text-white px-6 py-3 rounded-lg font-bold text-sm hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider">
-                {t('chat_send')}
-              </button>
+              <button onClick={() => handleSend()} disabled={loading || !input.trim()} className="bg-heritage-orange text-white px-6 py-3 rounded-lg font-bold text-sm hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider">{t('chat_send')}</button>
             </div>
           </div>
         </div>
