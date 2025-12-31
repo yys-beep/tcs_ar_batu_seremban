@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { useLoader } from '@react-three/fiber';
 import { useTexture } from '@react-three/drei';
 import * as THREE from 'three';
@@ -14,58 +14,33 @@ interface BatuModelProps {
 
 const BatuSerembanModel: React.FC<BatuModelProps> = ({ 
   position = [0, 0, 0], 
-  rotaion = [0, 0, 0], 
+  rotation = [0, 0, 0], 
   scale = 1, 
   texturePath, 
   fallbackColor = "#ea580c" 
 }) => {
   
-  const [loadError, setLoadError] = useState(false);
-  
-  // 1. Safe Load Texture
-  let texture: THREE.Texture | null = null;
-  try {
-    texture = texturePath ? useTexture(texturePath) : null;
-    if (texture) {
-      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(1, 1); 
-      texture.center.set(0.5, 0.5);
-      texture.colorSpace = THREE.SRGBColorSpace; 
-    }
-  } catch (e) {
-    console.warn("Texture failed to load:", texturePath);
-  }
+  // 1. Load Geometry
+  const obj = useLoader(OBJLoader, '/models/white_mesh.obj') as THREE.Group;
 
-  // 2. Load Geometry with Error Catching
-  let obj: THREE.Group | null = null;
-  try {
-    obj = useLoader(OBJLoader, '/models/white_mesh.obj') as THREE.Group;
-  } catch (e) {
-    if (!loadError) {
-      console.error("3D Model /models/white_mesh.obj not found. Using fallback sphere.");
-      setLoadError(true);
-    }
-  }
+  // 2. Load Texture
+  // We use the safe loading hook. If no path is provided, texture is null.
+  const texture = texturePath ? useTexture(texturePath) : null;
 
-  const material = useMemo(() => new THREE.MeshStandardMaterial({
-    map: texture || null,
-    color: texture ? '#ffffff' : fallbackColor,
-    roughness: 1.0, 
-    metalness: 0.0,
-  }), [texture, fallbackColor]);
+  if (texture) {
+    // Configure texture wrapping and repeat
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    // Adjust repeat if the pattern looks too big or small
+    texture.repeat.set(1, 1); 
+    texture.center.set(0.5, 0.5);
+    
+    // IMPORTANT: Using SRGBColorSpace ensures the texture colors are interpreted correctly
+    // and look vibrant/saturated, matching the "deep" look you liked.
+    texture.colorSpace = THREE.SRGBColorSpace; 
+  }
 
   // 3. Clone and Apply Material
-  const content = useMemo(() => {
-    if (loadError || !obj) {
-      // Fallback geometric shape if file is missing
-      return (
-        <mesh>
-          <sphereGeometry args={[0.5, 16, 16]} />
-          <primitive object={material} attach="material" />
-        </mesh>
-      );
-    }
-
+  const clonedScene = useMemo(() => {
     const clone = obj.clone(true);
     
     clone.traverse((child) => {
@@ -95,20 +70,28 @@ const BatuSerembanModel: React.FC<BatuModelProps> = ({
              mesh.geometry.attributes.uv.needsUpdate = true;
         }
 
-        mesh.material = material;
+        // --- THE MATERIAL STYLE FROM YOUR PREVIOUS CODE ---
+        mesh.material = new THREE.MeshStandardMaterial({
+          map: texture || null,
+          color: texture ? '#ffffff' : fallbackColor, // White base color lets the texture show through true
+          
+          // High Roughness = Matte Fabric (Not shiny)
+          roughness: 1.0, 
+          
+          // No Metalness = Fabric/Cloth look
+          metalness: 0.0,
+
+          // NO Emissive = This prevents the "pale/glowing" look. 
+          // The stones will only be lit by the scene lights, keeping colors deep.
+        });
       }
     });
-    return <primitive object={clone} />;
-    
-  }, [obj, material, loadError]);
+    return clone;
+  }, [obj, texture, fallbackColor]);
 
   const s = Array.isArray(scale) ? scale : [scale, scale, scale] as [number, number, number];
 
-    return (
-    <group position={position} rotation={rotation} scale={s}>
-      {content}
-    </group>
-  );
+  return <primitive object={clonedScene} position={position} rotation={rotation} scale={s} />;
 };
 
 export default BatuSerembanModel;
