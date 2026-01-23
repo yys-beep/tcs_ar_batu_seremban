@@ -70,7 +70,7 @@ const BatuSerembanModel: React.FC<BatuModelProps> = ({
              mesh.geometry.attributes.uv.needsUpdate = true;
         }
 
-        // --- THE MATERIAL STYLE FROM YOUR PREVIOUS CODE ---
+        
         mesh.material = new THREE.MeshStandardMaterial({
           map: texture || null,
           color: texture ? '#ffffff' : fallbackColor, // White base color lets the texture show through true
