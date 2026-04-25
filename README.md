@@ -32,15 +32,6 @@ This project was developed as part of a university course project focusing on AR
 
 ---
 
-## My Role
-- Enhanced and refined AR interaction system for better user experience
-- Improved hand-tracking accuracy and gesture recognition performance
-- Implemented additional interactive features for gameplay enhancement
-- Assisted in integrating AI-based functionalities into the application
-- Performed testing and debugging to ensure smooth system behavior
-
----
-
 ## How to Run the Project
 ### 1. Clone the repository
 ```bash id="ar1cl"
