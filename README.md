@@ -1,22 +1,47 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+
+<img width="1200" height="475" alt="AR Batu Seremban Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+
 </div>
 
-# Run and deploy your AI Studio app
+# AR Batu Seremban – Interactive AR Learning Application
 
-This contains everything you need to run your app locally.
+## Overview
+AR Batu Seremban is an augmented reality-based web application designed to enhance learning and interaction for the traditional Batu Seremban game. The system integrates AR technology and AI-based tools to provide an immersive and interactive user experience.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1U-v7p12BlqQ2Ppe0pm0qf596b5uhiYYX
+This project was developed as part of a university course project focusing on AR interaction, web development, and AI integration.
 
-## Run Locally
+---
 
-**Prerequisites:**  Node.js
+## Features
+- Augmented Reality interaction for Batu Seremban gameplay
+- Hand tracking and motion-based controls
+- Interactive learning experience for users
+- Improved gesture recognition accuracy
+- AI-assisted features using Google AI Studio
+- Responsive web-based interface
 
+---
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Tech Stack
+- Frontend: Web Development (JavaScript / Framework used)
+- AR Integration: Web-based AR tools
+- AI Integration: Google AI Studio / Gemini API
+- Runtime: Node.js
+- Deployment: Netlify
 
-Deployed Link on Netlify: https://arbatuseremban.netlify.app/
+---
+
+## My Role
+- Enhanced and refined AR interaction system for better user experience
+- Improved hand-tracking accuracy and gesture recognition performance
+- Implemented additional interactive features for gameplay enhancement
+- Assisted in integrating AI-based functionalities into the application
+- Performed testing and debugging to ensure smooth system behavior
+
+---
+
+## How to Run the Project
+### 1. Clone the repository
+```bash id="ar1cl"
+git clone <repository-link>
